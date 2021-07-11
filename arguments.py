@@ -3,8 +3,10 @@ import argparse
 import torch
 
 
-def get_args():
-    parser = argparse.ArgumentParser(description="RL")
+def get_parser():
+    parser = argparse.ArgumentParser(
+        description="Parser for arguments.py", add_help=True
+    )
 
     # the saving directory for train.py
     parser.add_argument("--output_dir", type=str, default="data/my_model")
@@ -18,7 +20,7 @@ def get_args():
     )
     parser.add_argument(
         "--overwrite",
-        default=True,
+        default=False,
         action="store_true",
         help="whether to overwrite the output directory in training",
     )
@@ -231,15 +233,4 @@ def get_args():
         "--env-name", default="CrowdSimDict-v0", help="name of the environment"
     )
 
-    args = parser.parse_args()
-
-    args.cuda = not args.no_cuda and torch.cuda.is_available()
-
-    assert args.algo in ["a2c", "ppo", "acktr"]
-    if args.recurrent_policy:
-        assert args.algo in [
-            "a2c",
-            "ppo",
-        ], "Recurrent policy is not implemented for ACKTR"
-
-    return args
+    return parser
