@@ -10,7 +10,7 @@ from crowd_sim.envs.utils.robot import Robot
 from crowd_sim.envs.utils.info import *
 from crowd_nav.policy.orca import ORCA
 from crowd_sim.envs.utils.state import *
-
+from crowd_sim.envs.utils.helper import VelocityRectangle
 
 
 from crowd_nav.policy.policy_factory import policy_factory
@@ -168,6 +168,7 @@ class CrowdSim(gym.Env):
         rob_RL = Robot(config, 'robot')
         self.set_robot(rob_RL)
 
+        self.last_acceleration = (0,0)
         return
 
 
@@ -729,11 +730,13 @@ class CrowdSim(gym.Env):
 
         danger_dists = []
         collision = False
+        step_info = dict()
+        robot_VR = VelocityRectangle(self.robot)
 
         for i, human in enumerate(self.humans):
             dx = human.px - self.robot.px
             dy = human.py - self.robot.py
-            closest_dist = (dx ** 2 + dy ** 2) ** (1 / 2) - human.radius - self.robot.radius
+            closest_dist = (dx ** 2 + dy ** 2) ** 0.5 - human.radius - self.robot.radius
 
             if closest_dist < self.discomfort_dist:
                 danger_dists.append(closest_dist)
@@ -744,22 +747,51 @@ class CrowdSim(gym.Env):
             elif closest_dist < dmin:
                 dmin = closest_dist
 
+            # SOCIAL METRIC 2
+            human_VR = VelocityRectangle(human)
+            if robot_VR.intersects(human_VR):
+                step_info["path_violation"] = 1
+            else:
+                step_info["path_violation"] = 0
 
         # check if reaching the goal
         reaching_goal = norm(np.array(self.robot.get_position()) - np.array(self.robot.get_goal_position())) < self.robot.radius
 
+        # SOCIAL METRIC 1
+        if closest_dist < self.config.social.min_personal_space:
+            step_info["personal_violation"] = 1
+        else:
+            step_info["personal_violation"] = 0
+        # SOCIAL METRIC 4
+        # calculate step jerk cost
+        ax = action.vx - self.robot.vx
+        ay = action.vy - self.robot.vy
+        d_ax = ax - self.last_acceleration[0]
+        d_ay = ay - self.last_acceleration[1]
+        jerk_cost = d_ax ** 2 + d_ay ** 2
+        self.last_acceleration = (ax, ay)
+
+        step_info["jerk_cost"] = jerk_cost
+
+        # SOCIAL METRIC 5
+        speed = (action.vx ** 2 + action.vy ** 2) ** 0.5
+        if speed > self.config.social.normal_walking_speed:
+            step_info["speed_violation"] = 1
+        else:
+            step_info["speed_violation"] = 0
+
         if self.global_time >= self.time_limit - 1:
             reward = 0
             done = True
-            episode_info = Timeout()
+            step_info["event"] = Timeout()
         elif collision:
             reward = self.collision_penalty
             done = True
-            episode_info = Collision()
+            step_info["event"] = Collision()
         elif reaching_goal:
             reward = self.success_reward
             done = True
-            episode_info = ReachGoal()
+            step_info["event"] = ReachGoal()
 
         elif dmin < self.discomfort_dist:
             # only penalize agent for getting too close if it's visible
@@ -767,7 +799,7 @@ class CrowdSim(gym.Env):
             # print(dmin)
             reward = (dmin - self.discomfort_dist) * self.discomfort_penalty_factor * self.time_step
             done = False
-            episode_info = Danger(dmin)
+            step_info["event"] = Danger(dmin)
 
         else:
             # potential reward
@@ -777,7 +809,7 @@ class CrowdSim(gym.Env):
             self.potential = -abs(potential_cur)
 
             done = False
-            episode_info = Nothing()
+            step_info["event"] = Nothing()
 
 
         # if the robot is near collision/arrival, it should be able to turn a large angle
@@ -795,7 +827,7 @@ class CrowdSim(gym.Env):
             # print(reward, r_spin, r_back)
             reward = reward + r_spin + r_back
 
-        return reward, done, episode_info
+        return reward, done, step_info
 
     # compute the observation
     def generate_ob(self, reset):
@@ -1007,7 +1039,7 @@ class CrowdSim(gym.Env):
             plt.text(self.humans[i].px - 0.1, self.humans[i].py - 0.1, str(i), color='black', fontsize=12)
 
 
-        plt.pause(0.1)
+        plt.pause(0.001)
         for item in artists:
             item.remove() # there should be a better way to do this. For example,
             # initially use add_artist and draw_artist later on
