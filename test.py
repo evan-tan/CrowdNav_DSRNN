@@ -35,6 +35,12 @@ def main():
         default="test",
         help="name of experiment, to name .log file in test/",
     )
+    test_parser.add_argument(
+        "--config",
+        type=str,
+        default="",
+        help="Name of config module to load. Use config to use config.py, or leave blank to use train_config",
+    )
     test_args = test_parser.parse_args()
 
     model_dir_temp = test_args.model_dir
@@ -58,12 +64,17 @@ def main():
     # import config class from saved directory
     # if not found, import from the default directory
     try:
-        model_dir_string = model_dir_temp.replace("/", ".") + ".configs.config"
+        if len(test_args.config) > 0:
+            cfg_file = test_args.config
+        else:
+            cfg_file = "train_config"
+
+        model_dir_string = model_dir_temp.replace("/", ".") + ".configs." + cfg_file
         model_arguments = import_module(model_dir_string)
         Config = getattr(model_arguments, "Config")
     except:
         print(
-            "Failed to get Config function from ", test_args.model_dir, "/arguments.py"
+            f"Failed to get {test_args.config} from {test_args.model_dir}, loading default CrowdNav config"
         )
         from crowd_nav.configs.config import Config
 
@@ -105,7 +116,7 @@ def main():
     log_file = log_dir / f_name
     # convert PosixPath to str
     log_file = str(log_file)
-    
+
     file_handler = logging.FileHandler(log_file, mode="w")
     stdout_handler = logging.StreamHandler(sys.stdout)
     level = logging.INFO
