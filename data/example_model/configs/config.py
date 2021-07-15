@@ -94,3 +94,7 @@ class Config(object):
     sf.B = 1
     sf.KI = 1
 
+
+    social = BaseConfig()
+    social.min_personal_space = 1.2
+    social.normal_walking_speed = 1.5
