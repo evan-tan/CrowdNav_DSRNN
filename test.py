@@ -13,6 +13,7 @@ from importlib import import_module
 from pytorchBaselines.a2c_ppo_acktr.envs import make_vec_envs
 from pytorchBaselines.evaluation import evaluate
 from crowd_sim import *
+from pytorchBaselines.a2c_ppo_acktr.model import Policy
 
 
 def main():
@@ -46,21 +47,6 @@ def main():
     model_dir_temp = test_args.model_dir
     if model_dir_temp.endswith("/"):
         model_dir_temp = model_dir_temp[:-1]
-
-    # import arguments.py from saved directory
-    # if not found, import from the default directory
-    try:
-        model_dir_string = model_dir_temp.replace("/", ".") + ".arguments"
-        model_arguments = import_module(model_dir_string)
-        get_parser = getattr(model_arguments, "get_parser")
-    except:
-        print(
-            "Failed to get get_parser function from ",
-            test_args.model_dir,
-            "/arguments.py",
-        )
-        from arguments import get_parser
-
     # import config class from saved directory
     # if not found, import from the default directory
     try:
@@ -79,21 +65,6 @@ def main():
         from crowd_nav.configs.config import Config
 
     config = Config()
-
-    algo_parser = get_parser()
-    # create combined parser
-    all_parser = argparse.ArgumentParser(
-        conflict_handler="resolve", parents=[test_parser, algo_parser]
-    )
-    algo_args = all_parser.parse_args()
-    algo_args.cuda = not algo_args.no_cuda and torch.cuda.is_available()
-
-    assert algo_args.algo in ["a2c", "ppo", "acktr"]
-    if algo_args.recurrent_policy:
-        assert algo_args.algo in [
-            "a2c",
-            "ppo",
-        ], "Recurrent policy is not implemented for ACKTR"
 
     # configure logging and device
     # print test result in log file
@@ -131,10 +102,10 @@ def main():
     logging.info("robot FOV %f", config.robot.FOV * np.pi)
     logging.info("humans FOV %f", config.humans.FOV * np.pi)
 
-    torch.manual_seed(algo_args.seed)
-    torch.cuda.manual_seed_all(algo_args.seed)
-    if algo_args.cuda:
-        if algo_args.cuda_deterministic:
+    torch.manual_seed(config.env.seed)
+    torch.cuda.manual_seed_all(config.env.seed)
+    if config.training.cuda:
+        if config.training.cuda_deterministic:
             # reproducible but slower
             torch.backends.cudnn.benchmark = False
             torch.backends.cudnn.deterministic = True
@@ -144,7 +115,7 @@ def main():
             torch.backends.cudnn.deterministic = False
 
     torch.set_num_threads(torch.get_num_threads())
-    device = torch.device("cuda" if algo_args.cuda else "cpu")
+    device = torch.device("cuda" if config.training.cuda else "cpu")
 
     logging.info("Create other envs with new settings")
 
@@ -164,10 +135,7 @@ def main():
     load_path = str(load_path)
     print(f"Using model {load_path}")
 
-    actor_critic, _ = torch.load(load_path)
-    actor_critic.base.nenv = 1
-
-    env_name = algo_args.env_name
+    env_name = config.env.env_name
     recurrent_cell = "GRU"
 
     eval_dir = Path.cwd() / test_args.model_dir / "eval"
@@ -176,17 +144,25 @@ def main():
 
     envs = make_vec_envs(
         env_name,
-        algo_args.seed,
+        config.env.seed,
         1,
-        algo_args.gamma,
+        config.reward.gamma,
         eval_dir,
         device,
         allow_early_resets=True,
-        envConfig=config,
+        config=config,
         ax=ax,
         test_case=test_args.test_case,
     )
 
+    actor_critic = Policy(
+        envs.observation_space.spaces,  # pass the Dict into policy to parse
+        envs.action_space,
+        base_kwargs=config,
+        base=config.robot.policy)
+
+    actor_critic.load_state_dict(torch.load(load_path, map_location=device))
+    actor_critic.base.nenv = 1
     # allow the usage of multiple GPUs to increase the number of examples processed simultaneously
     nn.DataParallel(actor_critic).to(device)
 
@@ -197,12 +173,12 @@ def main():
         eval_envs=envs,
         num_processes=1,
         device=device,
-        test_size=config.env.test_size,  # defaults to 500, number of episodes to test
+        config=config,  # defaults to 500, number of episodes to test
         logging=logging,
         visualize=test_args.visualize,
         recurrent_type=recurrent_cell,
     )
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

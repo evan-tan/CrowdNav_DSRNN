@@ -43,14 +43,13 @@ Details of the simulation framework can be found
 [here](crowd_sim/README.md). Below are the instructions for training and testing policies.
 
 ### Change configurations
-1. Environment configurations: modify `crowd_nav/configs/config.py`
+1. Environment configurations and training hyperparameters: modify `crowd_nav/configs/config.py`
 - For FoV environment (left in the figure below): change the value of `robot.FOV`
 - For Group environment (right in the figure below): set `sim.group_human` to `True`
 
 <img src="/figures/FOV_env.png" height="270" /> <img src="/figures/group_env.png" height="270" />
 
 
-2. PPO configurations: modify arguments.py 
 
 ### Run the code
 1. Train a policy. 
@@ -69,7 +68,7 @@ python test.py
 ```
 python plot.py
 ```
-(We only tested our code in Ubuntu 16.04 and 18.07 with Python 3.6.)
+(We only tested our code in Ubuntu 16.04 and 18.04 with Python 3.6.)
 
 ## Learning Curve
 Learning curves of DS-RNN in 360 degrees FoV environment with 5 humans.

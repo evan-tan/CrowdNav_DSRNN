@@ -12,11 +12,12 @@ def evaluate(
     eval_envs,
     num_processes,
     device,
-    test_size,
+    config,
     logging,
     visualize=False,
     recurrent_type="GRU",
 ):
+    test_size = config.env.test_size
 
     if ob_rms:
         vec_norm = utils.get_vec_normalize(eval_envs)
@@ -36,14 +37,14 @@ def evaluate(
     eval_recurrent_hidden_states["human_node_rnn"] = torch.zeros(
         num_processes,
         node_num,
-        actor_critic.base.human_node_rnn_size * rnn_factor,
+        config.SRNN.human_node_rnn_size * rnn_factor,
         device=device,
     )
 
     eval_recurrent_hidden_states["human_human_edge_rnn"] = torch.zeros(
         num_processes,
         edge_num,
-        actor_critic.base.human_human_edge_rnn_size * rnn_factor,
+        config.SRNN.human_human_edge_rnn_size * rnn_factor,
         device=device,
     )
 
@@ -75,23 +76,26 @@ def evaluate(
     speed_violation_times = []
     side_preferences = []
 
+    obs = eval_envs.reset()
     for k in range(test_size):
-        obs = eval_envs.reset()
         done = False
-        step_counter = 0
-        global_time = 0.0
         rewards = []
+        step_counter = 0
         episode_reward = 0
+
+        global_time = 0.0
         episode_path = 0.0
-        episode_chc = 0.0  # what is chc?
+        episode_chc = 0.0  # cumulative heading change
+
         personal_violation_time = 0
         path_violation_time = 0
         jerk_cost = 0
         speed_violation_time = 0
 
-        last_pos = obs["robot_node"][0, 0, 1:3].cpu().numpy()  # robot px, py
+        last_pos = obs["robot_node"][0, 0, 0:2].cpu().numpy()  # robot px, py
         last_angle = np.arctan2(
-            obs["edges"][0, 0, 1].cpu().numpy(), obs["edges"][0, 0, 0].cpu().numpy()
+            obs["temporal_edges"][0, 0, 1].cpu().numpy(),
+            obs["temporal_edges"][0, 0, 0].cpu().numpy(),
         )  # robot theta
 
         while not done:
@@ -117,18 +121,15 @@ def evaluate(
                 )
             )
 
-            episode_chc += abs(
-                np.arctan2(
-                    obs["edges"][0, 0, 1].cpu().numpy(),
-                    obs["edges"][0, 0, 0].cpu().numpy(),
-                )
-                - last_angle
+            cur_angle = np.arctan2(
+                obs["temporal_edges"][0, 0, 1].cpu().numpy(),
+                obs["temporal_edges"][0, 0, 0].cpu().numpy(),
             )
 
-            last_pos = obs["robot_node"][0, 0, 1:3].cpu().numpy()  # robot px, py
-            last_angle = np.arctan2(
-                obs["edges"][0, 0, 1].cpu().numpy(), obs["edges"][0, 0, 0].cpu().numpy()
-            )  # robot theta
+            episode_chc += abs(cur_angle - last_angle)
+
+            last_pos = obs["robot_node"][0, 0, 0:2].cpu().numpy()  # robot px, py
+            last_angle = cur_angle
 
             if isinstance(step_info[0]["info"], Danger):
                 min_dist.append(step_info[0]["info"].min_dist)
@@ -142,7 +143,6 @@ def evaluate(
             for info in step_info:
                 if "episode" in info.keys():
                     all_rewards.append(info["episode"]["r"])
-            print(step_info)
             if step_info[0].get("info").get("per`s`onal_violation") == 1:
                 personal_violation_time += base_env.time_step
             if step_info[0].get("info").get("path_violation") == 1:
@@ -159,7 +159,7 @@ def evaluate(
 
         print("")
         print("Reward={}".format(episode_reward))
-        print("Episode", k, "ends in", step_counter)
+        print("Episode", k, "ends in", step_counter, "steps")
 
         if isinstance(step_info[0].get("info").get("event"), ReachGoal):
             success_times.append(global_time)
