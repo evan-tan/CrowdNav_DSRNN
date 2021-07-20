@@ -52,8 +52,10 @@ def main():
     try:
         if len(test_args.config) > 0:
             cfg_file = test_args.config
+            print("Using config.py symbolic link")
         else:
             cfg_file = "train_config"
+            print("Using default train_config.py")
 
         model_dir_string = model_dir_temp.replace("/", ".") + ".configs." + cfg_file
         model_arguments = import_module(model_dir_string)
@@ -114,7 +116,7 @@ def main():
             torch.backends.cudnn.benchmark = True
             torch.backends.cudnn.deterministic = False
 
-    torch.set_num_threads(torch.get_num_threads())
+    torch.set_num_threads(1)
     device = torch.device("cuda" if config.training.cuda else "cpu")
 
     logging.info("Create other envs with new settings")
