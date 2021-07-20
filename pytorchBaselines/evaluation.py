@@ -18,7 +18,6 @@ def evaluate(
     recurrent_type="GRU",
 ):
     test_size = config.env.test_size
-
     if ob_rms:
         vec_norm = utils.get_vec_normalize(eval_envs)
         if vec_norm is not None:
@@ -74,7 +73,55 @@ def evaluate(
     aggregate_nav_times = []
     jerk_costs = []
     speed_violation_times = []
-    side_preferences = []
+
+    # START ALL SIDE PREFERENCE EPISODES
+    side_preferences = {"passing": {"left": 0, "right": 0},
+                        "overtaking": {"left": 0, "right": 0},
+                        "crossing": {"left": 0, "right": 0}}
+    if config.test.side_preference:
+        n_test_cases = 20
+        obs = eval_envs.reset()
+        scenario = config.test.side_preference_scenario
+        for i in range(n_test_cases):
+            done = False
+            step_counter = 0
+            episode_reward = 0
+            while not done:
+                step_counter += 1
+                with torch.no_grad():
+                    _, action, _, eval_recurrent_hidden_states = actor_critic.act(
+                        obs, eval_recurrent_hidden_states, eval_masks, deterministic=True
+                    )
+                if visualize:
+                    eval_envs.render()
+                # Obser reward and next obs
+                obs, step_reward, done, step_info = eval_envs.step(action)
+                if step_info[0].get("info").get("left") == 1:
+                    side_preferences[scenario]["left"] += 1
+                elif step_info[0].get("info").get("right") == 1:
+                    side_preferences[scenario]["right"] += 1
+                episode_reward += step_reward[0]
+
+            print("")
+            print("Reward={}".format(episode_reward))
+            print("Episode", i, "ends in", step_counter, "steps")
+            if isinstance(step_info[0].get("info").get("event"), ReachGoal):
+                print("Success")
+            elif isinstance(step_info[0].get("info").get("event"), Collision):
+                print("Collision")
+            elif isinstance(step_info[0].get("info").get("event"), Timeout):
+                print("Time out")
+            else:
+                raise ValueError("Invalid end signal from environment")
+
+
+        left_percentage = side_preferences[scenario]["left"] / (side_preferences[scenario]["left"] + side_preferences[scenario]["right"])
+
+        logging.info(f"Side Preference - {scenario}")
+        logging.info(f"Left = {left_percentage:.3f}")
+        logging.info(f"Right = {(1 - left_percentage):.3f}")
+
+    # END ALL SIDE PREFERENCE EPISODES
 
     obs = eval_envs.reset()
     for k in range(test_size):
@@ -115,8 +162,8 @@ def evaluate(
             episode_path += np.linalg.norm(
                 np.array(
                     [
-                        last_pos[0] - obs["robot_node"][0, 0, 1].cpu().numpy(),
-                        last_pos[1] - obs["robot_node"][0, 0, 2].cpu().numpy(),
+                        last_pos[0] - obs["robot_node"][0, 0, 0].cpu().numpy(),
+                        last_pos[1] - obs["robot_node"][0, 0, 1].cpu().numpy(),
                     ]
                 )
             )

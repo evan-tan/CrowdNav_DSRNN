@@ -148,7 +148,7 @@ class CrowdSimDict(CrowdSim):
         if self.random_goal_changing:
             if self.global_time % 5 == 0:
                 self.update_human_goals_randomly()
-        
+
         # Update a specific human's goal once its reached its original goal
         if self.end_goal_changing:
             for human in self.humans:
