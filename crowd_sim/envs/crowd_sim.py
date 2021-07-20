@@ -780,6 +780,21 @@ class CrowdSim(gym.Env):
             else:
                 step_info["path_violation"] = 0
 
+        # SOCIAL METRIC 6
+        if self.config.test.side_preference:
+            side_preference = {"left": 0, "right": 0}
+            scenario = self.config.test.side_preference_scenario
+            end_pos_r = self.robot.compute_position(action, self.time_step)
+            # self.humans should only contain 1 human
+            h = self.humans[0]
+            # check if robot y within human's radius
+            if end_pos_r[1] < h.py + h.radius and end_pos_r[1] > h.py - h.radius:
+                if end_pos_r[0] < h.px:
+                    side_preference["left"] = 1
+                else:
+                    side_preference["right"] = 1
+            step_info[scenario] = side_preference
+
         # check if reaching the goal
         reaching_goal = norm(np.array(self.robot.get_position()) - np.array(self.robot.get_goal_position())) < self.robot.radius
 
@@ -927,23 +942,6 @@ class CrowdSim(gym.Env):
 
         # compute reward and episode info
         reward, done, step_info = self.calc_reward(action)
-
-        # SOCIAL METRIC 6
-        side_preference = {"left": 0, "right": 0}
-        if self.config.test.side_preference:
-            end_pos_r = self.robot.compute_position(action, self.time_step)
-            # self.humans should only contain 1 human
-            h = self.humans[0]
-            # check if robot y within human's radius
-            if end_pos_r[1] < h.py + h.radius and end_pos_r[1] > h.py - h.radius:
-                scenario = self.config.test_side_preference_scenario
-                if end_pos_r[0] < h.px:
-                    side_preference["left"] = 1
-                else:
-                    side_preference["right"] = 1
-        step_info[scenario] = side_preference
-
-
 
         # apply action and update all agents
         self.robot.step(action)

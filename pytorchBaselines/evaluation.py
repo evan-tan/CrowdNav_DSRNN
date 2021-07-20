@@ -96,9 +96,10 @@ def evaluate(
                     eval_envs.render()
                 # Obser reward and next obs
                 obs, step_reward, done, step_info = eval_envs.step(action)
-                if step_info[0].get("info").get("left") == 1:
+                print(step_info[0].get("info"))
+                if step_info[0].get("info").get(scenario).get("left") == 1:
                     side_preferences[scenario]["left"] += 1
-                elif step_info[0].get("info").get("right") == 1:
+                elif step_info[0].get("info").get(scenario).get("right") == 1:
                     side_preferences[scenario]["right"] += 1
                 episode_reward += step_reward[0]
 
