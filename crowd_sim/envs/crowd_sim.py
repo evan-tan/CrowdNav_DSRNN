@@ -10,7 +10,7 @@ from crowd_sim.envs.utils.robot import Robot
 from crowd_sim.envs.utils.info import *
 from crowd_nav.policy.orca import ORCA
 from crowd_sim.envs.utils.state import *
-from crowd_sim.envs.utils.helper import VelocityRectangle
+from crowd_sim.envs.utils.helper import VelocityRectangle, vec_norm
 
 
 from crowd_nav.policy.policy_factory import policy_factory
@@ -975,6 +975,7 @@ class CrowdSim(gym.Env):
     def render(self, mode='human'):
         import matplotlib.pyplot as plt
         import matplotlib.lines as mlines
+        import matplotlib.text as mtext
         from matplotlib import patches
 
         plt.rcParams['animation.ffmpeg_path'] = '/usr/bin/ffmpeg'
@@ -1076,13 +1077,34 @@ class CrowdSim(gym.Env):
                 human_circles[i].set_color(c='g')
             else:
                 human_circles[i].set_color(c='r')
-            plt.text(self.humans[i].px - 0.1, self.humans[i].py - 0.1, str(i), color='black', fontsize=12)
+
+            # show human speed
+            h_px, h_py = self.humans[i].get_position()
+            human_speed = mtext.Text(
+                h_px,
+                h_py + self.humans[i].radius,
+                f"{vec_norm(self.humans[i].get_velocity(), [0, 0]):.2f}",
+                ha="center",
+                fontsize=9,
+            )
+            ax.add_artist(human_speed)
+            artists.append(human_speed)
+            # plt.text(self.humans[i].px - 0.1, self.humans[i].py - 0.1, str(i), color='black', fontsize=12)
+
+        robot_speed = mtext.Text(
+                self.robot.get_position()[0],
+                self.robot.get_position()[1] + self.robot.radius,
+                f"{vec_norm(self.robot.get_velocity(), [0, 0]):.2f}",
+                ha="center",
+                fontsize=9,
+        )
+        ax.add_artist(robot_speed)
+        artists.append(robot_speed)
 
 
         plt.pause(0.001)
         for item in artists:
             item.remove() # there should be a better way to do this. For example,
             # initially use add_artist and draw_artist later on
-        for t in ax.texts:
-            t.set_visible(False)
-
+        # for t in ax.texts:
+        #     t.set_visible(False)

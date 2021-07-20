@@ -38,7 +38,7 @@ class Config(object):
     sim.test_sim = "circle_crossing"
     sim.square_width = 10
     sim.circle_radius = 6
-    sim.human_num = 5
+    sim.human_num = 5 if not test.side_preference else 1
     # Group environment: set to true; FoV environment: false
     sim.group_human = False
 
@@ -53,11 +53,11 @@ class Config(object):
     humans.FOV = 2.
 
     # a human may change its goal before it reaches its old goal
-    humans.random_goal_changing = True
+    humans.random_goal_changing = True if not test.side_preference else False
     humans.goal_change_chance = 0.25
 
     # a human may change its goal after it reaches its old goal
-    humans.end_goal_changing = True
+    humans.end_goal_changing = True if not test.side_preference else False
     humans.end_goal_change_chance = 1.0
 
     # a human may change its radius and/or v_pref after it reaches its current goal
