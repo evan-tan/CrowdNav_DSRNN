@@ -8,7 +8,7 @@ class BaseConfig(object):
 
 class Config(object):
     test = BaseConfig()
-    test.side_preference = True
+    test.side_preference = False
     # NOTE: only 2 agents used in testing side preference
     # select from ["passing", "overtaking", "crossing"]
     test.side_preference_scenario = "passing"
