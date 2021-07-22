@@ -1204,15 +1204,17 @@ class CrowdSim(gym.Env):
 
             # show human speed
             h_px, h_py = self.humans[i].get_position()
-            human_speed = mtext.Text(
-                h_px,
-                h_py + self.humans[i].radius,
-                f"{vec_norm(self.humans[i].get_velocity(), [0, 0]):.2f}",
-                ha="center",
-                fontsize=9,
-            )
-            ax.add_artist(human_speed)
-            artists.append(human_speed)
+            human_speed = vec_norm(self.humans[i].get_velocity(), [0, 0])
+            if human_speed > 0:
+                human_speed_text = mtext.Text(
+                    h_px,
+                    h_py + self.humans[i].radius,
+                    f"{human_speed:.2f}",
+                    ha="center",
+                    fontsize=9,
+                )
+                ax.add_artist(human_speed_text)
+                artists.append(human_speed_text)
             # plt.text(self.humans[i].px - 0.1, self.humans[i].py - 0.1, str(i), color='black', fontsize=12)
 
         robot_speed = mtext.Text(
