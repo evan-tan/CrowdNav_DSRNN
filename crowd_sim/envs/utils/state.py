@@ -15,11 +15,35 @@ class FullState(object):
         self.velocity = (self.vx, self.vy)
 
     def __add__(self, other):
-        return other + (self.px, self.py, self.vx, self.vy, self.radius, self.gx, self.gy, self.v_pref, self.theta)
+        return other + (
+            self.px,
+            self.py,
+            self.vx,
+            self.vy,
+            self.radius,
+            self.gx,
+            self.gy,
+            self.v_pref,
+            self.theta,
+        )
 
     def __str__(self):
-        return ' '.join([str(x) for x in [self.px, self.py, self.vx, self.vy, self.radius, self.gx, self.gy,
-                                          self.v_pref, self.theta]])
+        return " ".join(
+            [
+                str(x)
+                for x in [
+                    self.px,
+                    self.py,
+                    self.vx,
+                    self.vy,
+                    self.radius,
+                    self.gx,
+                    self.gy,
+                    self.v_pref,
+                    self.theta,
+                ]
+            ]
+        )
 
 
 class ObservableState(object):
@@ -37,8 +61,9 @@ class ObservableState(object):
         return other + (self.px, self.py, self.vx, self.vy, self.radius)
 
     def __str__(self):
-        return ' '.join([str(x) for x in [self.px, self.py, self.vx, self.vy, self.radius]])
-
+        return " ".join(
+            [str(x) for x in [self.px, self.py, self.vx, self.vy, self.radius]]
+        )
 
 
 class JointState(object):
@@ -59,12 +84,11 @@ class ObservableState_noV(object):
 
         self.position = (self.px, self.py)
 
-
     def __add__(self, other):
         return other + (self.px, self.py, self.radius)
 
     def __str__(self):
-        return ' '.join([str(x) for x in [self.px, self.py, self.radius]])
+        return " ".join([str(x) for x in [self.px, self.py, self.radius]])
 
 
 class JointState_noV(object):

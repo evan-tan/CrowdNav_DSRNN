@@ -76,10 +76,12 @@ def evaluate(
 
     # START ALL SIDE PREFERENCE EPISODES
     if config.test.side_preference:
-        side_preferences = {"passing": {"left": 0, "right": 0},
-                            "overtaking": {"left": 0, "right": 0},
-                            "crossing": {"left": 0, "right": 0}}
-        n_test_cases = 20
+        side_preferences = {
+            "passing": {"left": 0, "right": 0},
+            "overtaking": {"left": 0, "right": 0},
+            "crossing": {"left": 0, "right": 0},
+        }
+        n_test_cases = 200
         scenario = config.test.side_preference_scenario
         obs = eval_envs.reset()
         for i in range(n_test_cases):
@@ -91,7 +93,10 @@ def evaluate(
                 step_counter += 1
                 with torch.no_grad():
                     _, action, _, eval_recurrent_hidden_states = actor_critic.act(
-                        obs, eval_recurrent_hidden_states, eval_masks, deterministic=True
+                        obs,
+                        eval_recurrent_hidden_states,
+                        eval_masks,
+                        deterministic=True,
                     )
                 if visualize:
                     eval_envs.render()
@@ -123,8 +128,9 @@ def evaluate(
             else:
                 raise ValueError("Invalid end signal from environment")
 
-
-        left_percentage = side_preferences[scenario]["left"] / (side_preferences[scenario]["left"] + side_preferences[scenario]["right"])
+        left_percentage = side_preferences[scenario]["left"] / (
+            side_preferences[scenario]["left"] + side_preferences[scenario]["right"]
+        )
 
         logging.info(f"Side Preference - {scenario}")
         logging.info(f"Left % = {100*left_percentage:.3f}%")
@@ -158,7 +164,10 @@ def evaluate(
                 step_counter += 1
                 with torch.no_grad():
                     _, action, _, eval_recurrent_hidden_states = actor_critic.act(
-                        obs, eval_recurrent_hidden_states, eval_masks, deterministic=True
+                        obs,
+                        eval_recurrent_hidden_states,
+                        eval_masks,
+                        deterministic=True,
                     )
                 if not done:
                     global_time = base_env.global_time
@@ -259,7 +268,9 @@ def evaluate(
         success_rate = len(success_times) / test_size
         collision_rate = len(collision_times) / test_size
         timeout_rate = len(timeout_times) / test_size
-        assert len(success_times) + len(collision_times) + len(timeout_times) == test_size
+        assert (
+            len(success_times) + len(collision_times) + len(timeout_times) == test_size
+        )
 
         # avg_nav_time = (
         #     sum(success_times) / len(success_times) if success_times else base_env.time_limit

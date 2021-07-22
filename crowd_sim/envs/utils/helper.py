@@ -11,9 +11,8 @@ def wrap_angle(angle):
     return angle
 
 
-def vec_norm(A,B):
+def vec_norm(A, B):
     return np.linalg.norm([A[0] - B[0], A[1] - B[1]])
-
 
 
 # https://shapely.readthedocs.io/en/stable/manual.html#shapely.geometry.box

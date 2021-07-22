@@ -6,7 +6,7 @@ class Human(Agent):
     # see Agent class in agent.py for details!!!
     def __init__(self, config, section):
         super().__init__(config, section)
-        self.isObstacle = False # whether the human is a static obstacle (part of wall) or a moving agent
+        self.isObstacle = False  # whether the human is a static obstacle (part of wall) or a moving agent
 
     def act(self, ob):
         """

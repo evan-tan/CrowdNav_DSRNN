@@ -2,7 +2,11 @@ import torch
 import torch.nn as nn
 
 
-from pytorchBaselines.a2c_ppo_acktr.distributions import Bernoulli, Categorical, DiagGaussian
+from pytorchBaselines.a2c_ppo_acktr.distributions import (
+    Bernoulli,
+    Categorical,
+    DiagGaussian,
+)
 from pytorchBaselines.a2c_ppo_acktr.srnn_model import SRNN
 
 
@@ -17,8 +21,8 @@ class Policy(nn.Module):
         if base_kwargs is None:
             base_kwargs = {}
 
-        if base == 'srnn':
-            base=SRNN
+        if base == "srnn":
+            base = SRNN
             self.base = base(obs_shape, base_kwargs)
             self.srnn = True
         else:
@@ -50,10 +54,12 @@ class Policy(nn.Module):
         raise NotImplementedError
 
     def act(self, inputs, rnn_hxs, masks, deterministic=False):
-        if not hasattr(self, 'srnn'):
+        if not hasattr(self, "srnn"):
             self.srnn = False
         if self.srnn:
-            value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks, infer=True)
+            value, actor_features, rnn_hxs = self.base(
+                inputs, rnn_hxs, masks, infer=True
+            )
 
         else:
             value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
@@ -84,6 +90,3 @@ class Policy(nn.Module):
         dist_entropy = dist.entropy().mean()
 
         return value, action_log_probs, dist_entropy, rnn_hxs
-
-
-

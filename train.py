@@ -29,10 +29,12 @@ def main():
     # additional check if I want to overwrite the directory
     output_dir = config.training.output_dir
     if Path(output_dir).exists() and config.training.overwrite:
-        overwrite_prompt = input("Overwrite directory?[y/n]")
+        overwrite_prompt = input(f"{output_dir} exists, Overwrite directory?[y/n]")
         if "y" in overwrite_prompt:
             # delete an entire directory tree
             shutil.rmtree(output_dir)
+        else:
+            return
     if not Path(output_dir).exists():
         Path(output_dir).mkdir()
 
@@ -83,7 +85,8 @@ def main():
             torch.backends.cudnn.benchmark = True
             torch.backends.cudnn.deterministic = False
 
-    torch.set_num_threads(config.training.num_threads)
+    # torch.set_num_threads(config.training.num_threads)
+    torch.set_num_threads(torch.get_num_threads())
     device = torch.device(
         "cuda" if config.training.cuda and torch.cuda.is_available() else "cpu"
     )

@@ -21,6 +21,6 @@ setup(
         "scipy",
         "torch",
         "torchvision",
-        "scipy"
-    ]
+        "scipy",
+    ],
 )

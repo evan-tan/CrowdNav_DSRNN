@@ -161,7 +161,8 @@ def main():
         envs.observation_space.spaces,  # pass the Dict into policy to parse
         envs.action_space,
         base_kwargs=config,
-        base=config.robot.policy)
+        base=config.robot.policy,
+    )
 
     actor_critic.load_state_dict(torch.load(load_path, map_location=device))
     actor_critic.base.nenv = 1
@@ -182,5 +183,5 @@ def main():
     )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

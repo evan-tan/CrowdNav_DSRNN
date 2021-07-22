@@ -17,7 +17,6 @@ class Policy(object):
         self.env = None
         self.config = config
 
-
     @abc.abstractmethod
     def predict(self, state):
         """
@@ -29,8 +28,12 @@ class Policy(object):
     @staticmethod
     def reach_destination(state):
         self_state = state.self_state
-        if np.linalg.norm((self_state.py - self_state.gy, self_state.px - self_state.gx)) < self_state.radius:
+        if (
+            np.linalg.norm(
+                (self_state.py - self_state.gy, self_state.px - self_state.gx)
+            )
+            < self_state.radius
+        ):
             return True
         else:
             return False
-

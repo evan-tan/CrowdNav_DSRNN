@@ -14,7 +14,7 @@ class Config(object):
     test.side_preference_scenario = "passing"
 
     env = BaseConfig()
-    env.env_name = 'CrowdSimDict-v0'  # name of the environment
+    env.env_name = "CrowdSimDict-v0"  # name of the environment
     env.time_limit = 50
     env.time_step = 0.25
     env.val_size = 100
@@ -33,31 +33,31 @@ class Config(object):
     reward.gamma = 0.99  # discount factor for rewards
 
     sim = BaseConfig()
-    sim.render = False # show GUI for visualization
+    sim.render = False  # show GUI for visualization
     sim.train_val_sim = "circle_crossing"
     sim.test_sim = "circle_crossing"
     sim.square_width = 10
     sim.circle_radius = 6
-    sim.human_num = 1
+    sim.human_num = 5 if not test.side_preference else 1
     # Group environment: set to true; FoV environment: false
     sim.group_human = False
 
     humans = BaseConfig()
-    humans.visible = True # a human is visible to other humans and the robot
+    humans.visible = True  # a human is visible to other humans and the robot
     # orca or social_force for now
     humans.policy = "orca"
     humans.radius = 0.3
     humans.v_pref = 1
     humans.sensor = "coordinates"
     # FOV = this values * PI
-    humans.FOV = 2.
+    humans.FOV = 2.0
 
     # a human may change its goal before it reaches its old goal
-    humans.random_goal_changing = True
+    humans.random_goal_changing = True if not test.side_preference else False
     humans.goal_change_chance = 0.25
 
     # a human may change its goal after it reaches its old goal
-    humans.end_goal_changing = True
+    humans.end_goal_changing = True if not test.side_preference else False
     humans.end_goal_change_chance = 1.0
 
     # a human may change its radius and/or v_pref after it reaches its current goal
@@ -71,14 +71,14 @@ class Config(object):
     humans.random_policy_changing = False
 
     robot = BaseConfig()
-    robot.visible = False # the robot is visible to humans
+    robot.visible = False  # the robot is visible to humans
     # srnn for now
-    robot.policy = 'srnn'
+    robot.policy = "srnn"
     robot.radius = 0.3
     robot.v_pref = 1
     robot.sensor = "coordinates"
     # FOV = this values * PI
-    robot.FOV = 2.
+    robot.FOV = 2.0
 
     noise = BaseConfig()
     noise.add_noise = False
@@ -99,7 +99,7 @@ class Config(object):
 
     # social force
     sf = BaseConfig()
-    sf.A = 2.
+    sf.A = 2.0
     sf.B = 1
     sf.KI = 1
 
@@ -147,11 +147,15 @@ class Config(object):
     training.use_linear_lr_decay = False  # use a linear schedule on the learning rate: True for unicycle, False for holonomic
     training.save_interval = 200  # save interval, one save per n updates
     training.log_interval = 20  # log interval, one log per n updates
-    training.use_proper_time_limits = False  # compute returns taking into account time limits
-    training.cuda_deterministic = False  # sets flags for determinism when using CUDA (potentially slow!)
+    training.use_proper_time_limits = (
+        False  # compute returns taking into account time limits
+    )
+    training.cuda_deterministic = (
+        False  # sets flags for determinism when using CUDA (potentially slow!)
+    )
     training.cuda = True  # use CUDA for training
-    training.num_processes = 12 # how many training CPU processes to use
-    training.output_dir = 'data/dummy'  # the saving directory for train.py
+    training.num_processes = 12  # how many training CPU processes to use
+    training.output_dir = "data/dummy"  # the saving directory for train.py
     training.resume = False  # resume training from an existing checkpoint or not
     training.load_path = None  # if resume = True, load from the following checkpoint
     training.overwrite = True  # whether to overwrite the output directory in training
