@@ -37,7 +37,7 @@ class Config(object):
     sim.train_val_sim = "circle_crossing"
     sim.test_sim = "circle_crossing"
     sim.square_width = 10
-    sim.circle_radius = 6
+    sim.circle_radius = 6 if not test.side_preference else 4
     sim.human_num = 5 if not test.side_preference else 1
     # Group environment: set to true; FoV environment: false
     sim.group_human = False
@@ -93,7 +93,7 @@ class Config(object):
     # config for ORCA
     orca = BaseConfig()
     orca.neighbor_dist = 10
-    orca.safety_space = 0.15
+    orca.safety_space = 0.15 if not test.side_preference else 0
     orca.time_horizon = 5
     orca.time_horizon_obst = 5
 

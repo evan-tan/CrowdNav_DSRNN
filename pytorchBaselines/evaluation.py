@@ -62,7 +62,7 @@ def evaluate(
     cumulative_rewards = []
 
     path_lengths = []
-    chc_total = []
+    chc_total = []  # cumulative heading change
     min_dist = []
     gamma = 0.99
     base_env = eval_envs.venv.envs[0].env
@@ -84,11 +84,21 @@ def evaluate(
         n_test_cases = 200
         scenario = config.test.side_preference_scenario
         obs = eval_envs.reset()
+        n_success = 0
+        n_timeout = 0
+        n_collision = 0
+        path_lengths = []
+        success_times = []
+        avg_separation = []
         for i in range(n_test_cases):
             done = False
             step_counter = 0
             episode_reward = 0
-            counter = {"left": 0, "right": 0}
+            episode_path = 0
+            global_time = 0
+            episode_separation = 0
+            side_counter = {"left": 0, "right": 0}
+            last_pos = obs["robot_node"][0, 0, 0:2].cpu().numpy()
             while not done:
                 step_counter += 1
                 with torch.no_grad():
@@ -98,43 +108,76 @@ def evaluate(
                         eval_masks,
                         deterministic=True,
                     )
+                if not done:
+                    global_time = base_env.global_time
                 if visualize:
                     eval_envs.render()
                 # Obser reward and next obs
                 obs, step_reward, done, step_info = eval_envs.step(action)
 
-                # print(step_info[0].get("info"))
-
                 if step_info[0].get("info").get(scenario) is not None:
                     curr_scenario = step_info[0].get("info").get(scenario)
                     if curr_scenario.get("left") == 1:
-                        counter["left"] += 1
+                        side_counter["left"] += 1
                     elif curr_scenario.get("right") == 1:
-                        counter["right"] += 1
-
+                        side_counter["right"] += 1
+                if step_info[0].get("info").get("separation"):
+                    episode_separation += step_info[0].get("info").get("separation")
+                episode_path += np.linalg.norm(
+                    np.array(
+                        [
+                            last_pos[0] - obs["robot_node"][0, 0, 0].cpu().numpy(),
+                            last_pos[1] - obs["robot_node"][0, 0, 1].cpu().numpy(),
+                        ]
+                    )
+                )
+                # update last pos
+                last_pos = obs["robot_node"][0, 0, 0:2].cpu().numpy()
                 episode_reward += step_reward[0]
+            episode_separation /= step_counter
+
+            # multiple steps in each episode, but we want to label with single value. calculate number of occurrences of left and right and take highest
+            for k in side_counter.keys():
+                side_counter[k] /= step_counter
 
             print("")
             print("Reward={}".format(episode_reward))
             print("Episode", i, "ends in", step_counter, "steps")
             if isinstance(step_info[0].get("info").get("event"), ReachGoal):
-                # calculate side preference ONLY IF success
-                side_preferences[scenario] = counter
+                if side_counter["left"] > side_counter["right"]:
+                    side_preferences[scenario]["left"] += 1
+                elif side_counter["left"] < side_counter["right"]:
+                    side_preferences[scenario]["right"] += 1
+
+                n_success += 1
+                success_times.append(global_time)
+                path_lengths.append(episode_path)
+                avg_separation.append(episode_separation)
                 print("Success")
             elif isinstance(step_info[0].get("info").get("event"), Collision):
+                n_collision += 1
                 print("Collision")
             elif isinstance(step_info[0].get("info").get("event"), Timeout):
+                n_timeout += 1
                 print("Time out")
             else:
                 raise ValueError("Invalid end signal from environment")
 
-        left_percentage = side_preferences[scenario]["left"] / (
-            side_preferences[scenario]["left"] + side_preferences[scenario]["right"]
-        )
+        left_percentage = side_preferences[scenario]["left"] / n_test_cases
+        right_percentage = side_preferences[scenario]["right"] / n_test_cases
+
+        logging.info(f"success rate: {(n_success/n_test_cases):.2f}")
+        logging.info(f"collision rate: {(n_collision/n_test_cases):.2f}")
+        logging.info(f"timeout rate: {(n_timeout/n_test_cases):.2f}")
+
+        metrics.add_metric("navigation time", success_times)
+        metrics.add_metric("path length", path_lengths)
+        metrics.add_metric("avg separation", avg_separation)
+        metrics.log_metrics()
 
         logging.info(f"Side Preference - {scenario}")
         logging.info(f"Left % = {100*left_percentage:.3f}%")
-        logging.info(f"Right % = {100*(1 - left_percentage):.3f}%")
+        logging.info(f"Right % = {100*right_percentage:.3f}%")
 
     # END ALL SIDE PREFERENCE EPISODES
     else:
@@ -153,6 +196,7 @@ def evaluate(
             path_violation_time = 0
             jerk_cost = 0
             speed_violation_time = 0
+            aggregate_nav_time = 0
 
             last_pos = obs["robot_node"][0, 0, 0:2].cpu().numpy()  # robot px, py
             last_angle = np.arctan2(
@@ -208,11 +252,13 @@ def evaluate(
                 for info in step_info:
                     if "episode" in info.keys():
                         all_rewards.append(info["episode"]["r"])
-                if step_info[0].get("info").get("per`s`onal_violation") == 1:
+                if step_info[0].get("info").get("personal_violation") == 1:
                     personal_violation_time += base_env.time_step
-                if step_info[0].get("info").get("path_violation") == 1:
-                    path_violation_time += base_env.time_step
-                if step_info[0].get("info").get("jerk_cost") is not None:
+                if step_info[0].get("info").get("path_violation"):
+                    path_violation_time += base_env.time_step * step_info[0].get("info").get("path_violation")
+                if step_info[0].get("info").get("aggregate_nav_time"):
+                    aggregate_nav_time += base_env.time_step * step_info[0].get("info").get("aggregate_nav_time")
+                if step_info[0].get("info").get("jerk_cost"):
                     jerk_cost += step_info[0]["info"].get("jerk_cost")
                 if step_info[0].get("info").get("speed_violation") == 1:
                     speed_violation_time += base_env.time_step
@@ -233,7 +279,7 @@ def evaluate(
                 personal_violation_times.append(personal_violation_time)
                 path_violation_times.append(path_violation_time)
                 # since number of edges = n_robot + n_humans
-                aggregate_nav_times.append(step_counter * base_env.time_step * edge_num)
+                aggregate_nav_times.append(aggregate_nav_time)
                 jerk_costs.append(jerk_cost)
                 speed_violation_times.append(speed_violation_time)
                 print("Success")
@@ -307,8 +353,9 @@ def evaluate(
 
         metrics.add_metric("navigation time", success_times)
         metrics.add_metric("path length", path_lengths)
-        metrics.add_metric("total reward", cumulative_rewards)
-        metrics.add_metric("rewards", all_rewards)
+        metrics.add_metric("time weighted reward", cumulative_rewards)
+        metrics.add_metric("all rewards", all_rewards)
+        metrics.add_metric("cumulative heading change", chc_total)
 
         # social conformity metrics
         metrics.add_metric("SM1 - personal space violation", personal_violation_times)

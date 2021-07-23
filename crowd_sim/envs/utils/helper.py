@@ -1,6 +1,6 @@
 import shapely.geometry
 import numpy as np
-
+from crowd_sim.envs.utils.agent import Agent
 
 # wrap angle between [-180, 180]
 def wrap_angle(angle):
@@ -17,30 +17,32 @@ def vec_norm(A, B):
 
 # https://shapely.readthedocs.io/en/stable/manual.html#shapely.geometry.box
 class VelocityRectangle:
-    def __init__(self, agent):
-        self.agent = agent
+    # how many time steps ahead to extend velocity rectangle by
+    T_STEPS = 1
+
+    def __init__(self, agent: Agent):
+        self._agent = agent
         assert agent is not None
         self._create_rect()
 
     def _create_rect(self):
-        # scaling factor for rect_len, see Kevin's paper
-        k = 1
-        rlength = k * (self.agent.vx ** 2 + self.agent.vy ** 2) ** 0.5
-        rwidth = 2 * self.agent.radius
-        heading = self.agent.theta
+        # scaling factor for rectangle length, see Kevin's paper
+        rlength = self.T_STEPS * (self._agent.vx ** 2 + self._agent.vy ** 2) ** 0.5
+        rwidth = 2 * self._agent.radius
+        heading = self._agent.theta
 
         # create rectangle at 0,0 first, bottom edge touching horizontal axis
         origin_rect = shapely.geometry.box(-rwidth / 2, 0, rwidth / 2, rlength)
         # rotate ABOUT (0,0) based on agent heading
         rot_rect = shapely.affinity.rotate(origin_rect, angle=heading, origin=(0, 0))
         # translate to get final rect
-        self.vec_rect = shapely.affinity.translate(
-            rot_rect, self.agent.px, self.agent.py
+        self._vec_rect = shapely.affinity.translate(
+            rot_rect, self._agent.px, self._agent.py
         )
 
     def intersects(self, VelocityRectangleObject):
-        assert hasattr(VelocityRectangleObject, "vec_rect")
-        return self.vec_rect.intersects(VelocityRectangleObject.vec_rect)
+        assert hasattr(VelocityRectangleObject, "_vec_rect")
+        return self._vec_rect.intersects(VelocityRectangleObject._vec_rect)
 
 
 class SidePreference:
@@ -79,3 +81,4 @@ class SidePreference:
                 set_pos_h = self._slice_pos_hist(i, key)
                 gesture = self._determine_gesture(set_pos_r, set_pos_h)
                 # TODO take gesture that occurs most
+                pass

@@ -820,6 +820,8 @@ class CrowdSim(gym.Env):
         collision = False
         step_info = dict()
         robot_VR = VelocityRectangle(self.robot)
+        vec_rect_violations = 0  # social zone violations
+        aggregate_nav_time = 0
 
         for i, human in enumerate(self.humans):
             dx = human.px - self.robot.px
@@ -838,9 +840,15 @@ class CrowdSim(gym.Env):
             # SOCIAL METRIC 2
             human_VR = VelocityRectangle(human)
             if robot_VR.intersects(human_VR):
-                step_info["path_violation"] = 1
-            else:
-                step_info["path_violation"] = 0
+                vec_rect_violations += 1
+            # SOCIAL METRIC 3
+            if not human.reached_destination():
+                aggregate_nav_time += 1
+
+        if not self.robot.reached_destination():
+            aggregate_nav_time += 1
+        step_info["aggregate_nav_time"] = aggregate_nav_time
+        step_info["path_violation"] = vec_rect_violations
 
         # SOCIAL METRIC 6
         if self.config.test.side_preference:
@@ -850,24 +858,20 @@ class CrowdSim(gym.Env):
             # self.humans should only contain 1 human
             h = self.humans[0]
             # check if robot y within human's radius
-            if end_pos_r[1] < h.py + h.radius and end_pos_r[1] > h.py - h.radius:
+            if end_pos_r[1] <= (h.py + h.radius) and end_pos_r[1] >= (h.py - h.radius):
                 if end_pos_r[0] < h.px:
                     side_preference["left"] = 1
                 else:
                     side_preference["right"] = 1
             step_info[scenario] = side_preference
+            step_info["separation"] = vec_norm(h.get_position(), self.robot.get_position())
+
 
         # check if reaching the goal
-        reaching_goal = (
-            norm(
-                np.array(self.robot.get_position())
-                - np.array(self.robot.get_goal_position())
-            )
-            < self.robot.radius
-        )
+        reaching_goal = self.robot.reached_destination()
 
         # SOCIAL METRIC 1
-        if closest_dist < self.config.social.min_personal_space:
+        if dmin < self.config.social.min_personal_space:
             step_info["personal_violation"] = 1
         else:
             step_info["personal_violation"] = 0

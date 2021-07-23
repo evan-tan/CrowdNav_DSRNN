@@ -1,3 +1,8 @@
 .idea/
 *.pyc 
 **/__pycache__
+
+# ignore all trained models
+/data/
+!/data/example_model/
+!/data/example_model_unicycle/
