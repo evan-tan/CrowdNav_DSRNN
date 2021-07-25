@@ -29,7 +29,7 @@ def main():
         help="if -1 is used, it will run 500 different cases; if >=0, it will run the specified test case repeatedly",
     )
     # model weight file you want to test
-    test_parser.add_argument("--test_model", type=str, default="27776.pt")
+    test_parser.add_argument("--test_model", type=str, default=None)
     test_parser.add_argument(
         "--test_name",
         type=str,
@@ -47,6 +47,28 @@ def main():
     model_dir_temp = test_args.model_dir
     if model_dir_temp.endswith("/"):
         model_dir_temp = model_dir_temp[:-1]
+
+    # check which model to load by default
+    if test_args.test_model is None:
+        train_cfg_path = model_dir_temp.replace("/", ".") + ".configs.train_config"
+        cfg_module = import_module(train_cfg_path)
+        train_cfg = getattr(cfg_module, "Config")
+        tmp_cfg = train_cfg()
+        if tmp_cfg.training.num_processes == 12:
+            # LOAD DEFAULT MODEL
+            test_args.test_model = "27776.pt"
+        else:
+            # sort through all checkpoints
+            checkpoints_path = Path(model_dir_temp) / "checkpoints"
+            f_list = []
+            for model in checkpoints_path.iterdir():
+                # convert PosixPath to str
+                checkpoints_path = str(checkpoints_path)
+                model = str(model)
+                model = model.replace(checkpoints_path, "").replace("/", "")
+                f_list.append(model)
+            test_args.test_model = sorted(f_list, reverse=True)[0]
+
     # import config class from saved directory
     # if not found, import from the default directory
     try:
