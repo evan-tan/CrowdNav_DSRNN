@@ -172,6 +172,7 @@ class CrowdSim(gym.Env):
         self.set_robot(rob_RL)
 
         self.last_acceleration = (0, 0)
+        self.robot_VR = None
         return
 
     def set_robot(self, robot):
@@ -819,7 +820,7 @@ class CrowdSim(gym.Env):
         danger_dists = []
         collision = False
         step_info = dict()
-        robot_VR = VelocityRectangle(self.robot)
+        self.robot_VR = VelocityRectangle(self.robot)
         vec_rect_violations = 0  # social zone violations
         aggregate_nav_time = 0
 
@@ -839,7 +840,7 @@ class CrowdSim(gym.Env):
 
             # SOCIAL METRIC 2
             human_VR = VelocityRectangle(human)
-            if robot_VR.intersects(human_VR):
+            if self.robot_VR.intersects(human_VR):
                 vec_rect_violations += 1
             # SOCIAL METRIC 3
             if not human.reached_destination():
@@ -1231,7 +1232,13 @@ class CrowdSim(gym.Env):
         ax.add_artist(robot_speed)
         artists.append(robot_speed)
 
-        plt.pause(0.001)
+        from matplotlib import patches
+        if self.robot_VR is not None:
+            polygon = patches.Polygon(xy=self.robot_VR._vel_rect.exterior.coords, fill=False)
+            ax.add_artist(polygon)
+            artists.append(polygon)
+
+        plt.pause(0.01)
         for item in artists:
             item.remove()  # there should be a better way to do this. For example,
             # initially use add_artist and draw_artist later on
