@@ -12,10 +12,11 @@ class Config(object):
     # NOTE: only 2 agents used in testing side preference
     # select from ["passing", "overtaking", "crossing"]
     test.side_preference_scenario = "passing"
+    test.social_metrics = False
 
     env = BaseConfig()
     env.env_name = "CrowdSimDict-v0"  # name of the environment
-    env.time_limit = 50
+    env.time_limit = 50 if not test.side_preference else 30
     env.time_step = 0.1
     env.val_size = 100
     env.test_size = 500
@@ -36,8 +37,8 @@ class Config(object):
     sim.render = False  # show GUI for visualization
     sim.train_val_sim = "circle_crossing"
     sim.test_sim = "circle_crossing"
-    sim.square_width = 10
-    sim.circle_radius = 6
+    sim.square_width = 20
+    sim.circle_radius = 6 if not test.side_preference and not test.social_metrics else 4
     sim.human_num = 5 if not test.side_preference else 1
     # Group environment: set to true; FoV environment: false
     sim.group_human = False
@@ -104,7 +105,7 @@ class Config(object):
     sf.KI = 1
 
     social = BaseConfig()
-    social.min_personal_space = 1.2
+    social.min_personal_space = 0.2
     social.max_walking_speed = 1.5
 
     # ppo

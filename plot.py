@@ -49,13 +49,13 @@ def main(save_figures=False):
                     np.average(model_dicts[key][metric_list[i]]),
                 )
                 k += 1
-        print("------------------------")
         ax.set_xlabel("total_timesteps")
         ax.legend(loc="upper left")
         if save_figures:
             f_name = "metric" + str(i + 1) + ".jpg"
             plt.savefig(f_name)
             print("Saved to ", f_name)
+        print("------------------------")
     plt.show()
 
 if __name__ == '__main__':

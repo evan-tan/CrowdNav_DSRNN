@@ -432,7 +432,10 @@ class CrowdSim(gym.Env):
             # for Group environment
             if self.group_human:
                 # set the robot in a dummy far away location to avoid collision with humans
-                self.robot.set(10, 10, 10, 10, 0, 0, np.pi / 2)
+                if self.config.test.social_metrics:
+                    self.robot.set(0, -self.circle_radius, 0, self.circle_radius, 0, 0, np.pi / 2)
+                else:
+                    self.robot.set(10, 10, 10, 10, 0, 0, np.pi / 2)
 
                 # generate humans
                 self.circle_groups = []
@@ -512,13 +515,16 @@ class CrowdSim(gym.Env):
 
                 # randomize starting position and goal position
                 else:
-                    while True:
-                        px, py, gx, gy = np.random.uniform(
-                            -self.circle_radius, self.circle_radius, 4
-                        )
-                        if np.linalg.norm([px - gx, py - gy]) >= 6:
-                            break
-                    self.robot.set(px, py, gx, gy, 0, 0, np.pi / 2)
+                    if self.config.test.social_metrics:
+                        self.robot.set(0, -self.circle_radius, 0, self.circle_radius, 0, 0, np.pi / 2)
+                    else:
+                        while True:
+                            px, py, gx, gy = np.random.uniform(
+                                -self.circle_radius, self.circle_radius, 4
+                            )
+                            if np.linalg.norm([px - gx, py - gy]) >= 6:
+                                break
+                        self.robot.set(px, py, gx, gy, 0, 0, np.pi / 2)
 
                 # generate humans
                 self.generate_random_human_position(human_num=human_num)
@@ -531,7 +537,7 @@ class CrowdSim(gym.Env):
         # this by duplicating the observation of the human
         human = Human(self.config, "humans")
         self.robot.set(
-            0, -self.circle_radius, 0, self.circle_radius + 1, 0, 0, np.pi / 2
+            0, -self.circle_radius, 0, self.circle_radius, 0, 0, np.pi / 2
         )
         scenario = self.config.test.side_preference_scenario
         for i in range(self.human_num):

@@ -344,9 +344,9 @@ def evaluate(
                 f"Total time in danger: {(len(min_dist) * base_env.robot.time_step / total_time):.4f}, average min distance in danger: {avg_min_dist:.4f}"
             )
 
-        logging.info(f"success rate: {success_rate:.2f}")
-        logging.info(f"collision rate: {collision_rate:.2f}")
-        logging.info(f"timeout rate: {timeout_rate:.2f}")
+        logging.info(f"success rate: {success_rate:.3f}")
+        logging.info(f"collision rate: {collision_rate:.3f}")
+        logging.info(f"timeout rate: {timeout_rate:.3f}")
 
         logging.info("Collision cases: " + " ".join([str(x) for x in collision_cases]))
         logging.info("Timeout cases: " + " ".join([str(x) for x in timeout_cases]))
