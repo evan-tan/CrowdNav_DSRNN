@@ -146,8 +146,8 @@ def main():
     if test_args.visualize:
         fig, ax = plt.subplots(figsize=(7, 7))
         val = config.sim.square_width
-        ax.set_xlim(-val, val)
-        ax.set_ylim(-val, val)
+        ax.set_xlim(-val / 2, val / 2)
+        ax.set_ylim(-val / 2, val / 2)
         ax.set_xlabel("x(m)", fontsize=16)
         ax.set_ylabel("y(m)", fontsize=16)
         plt.ion()
@@ -157,7 +157,7 @@ def main():
 
     load_path = Path.cwd() / test_args.model_dir / "checkpoints" / test_args.test_model
     load_path = str(load_path)
-    print(f"Using model {load_path}")
+    logging.info(f"Using model {load_path}")
 
     env_name = config.env.env_name
     recurrent_cell = "GRU"

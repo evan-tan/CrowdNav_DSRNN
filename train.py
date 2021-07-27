@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import pandas as pd
 import matplotlib.pyplot as plt
-
+from datetime import datetime
 from pytorchBaselines.a2c_ppo_acktr import algo, utils
 
 from pytorchBaselines.a2c_ppo_acktr.envs import make_vec_envs
@@ -179,7 +179,7 @@ def main():
         // config.ppo.num_steps
         // config.training.num_processes
     )
-
+    start_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     for j in range(num_updates):
 
         if config.training.use_linear_lr_decay:
@@ -326,7 +326,9 @@ def main():
                     header=True,
                     index=False,
                 )
-
+    end_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    logging.info("START @ " + start_time)
+    logging.info("END @ " + end_time)
 
 if __name__ == "__main__":
     main()
