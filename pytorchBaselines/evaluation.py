@@ -4,7 +4,8 @@ import torch
 from crowd_sim.envs.utils.info import Timeout, ReachGoal, Danger, Collision, Nothing
 from pytorchBaselines.a2c_ppo_acktr import utils
 from pytorchBaselines.metrics import Metrics
-
+from matplotlib import pyplot as plt
+import time
 
 def evaluate(
     actor_critic,
@@ -99,6 +100,8 @@ def evaluate(
             episode_separation = 0
             side_counter = {"left": 0, "right": 0}
             last_pos = obs["robot_node"][0, 0, 0:2].cpu().numpy()
+
+            total_render_time = 0
             while not done:
                 step_counter += 1
                 with torch.no_grad():
@@ -111,7 +114,9 @@ def evaluate(
                 if not done:
                     global_time = base_env.global_time
                 if visualize:
+                    start = time.time()
                     eval_envs.render()
+                    total_render_time += time.time() - start
                 # Obser reward and next obs
                 obs, step_reward, done, step_info = eval_envs.step(action)
 
@@ -143,6 +148,8 @@ def evaluate(
             print("")
             print("Reward={}".format(episode_reward))
             print("Episode", i, "ends in", step_counter, "steps")
+            print(f"Average FPS = {1 / (total_render_time / step_counter):.3f}")
+
             if isinstance(step_info[0].get("info").get("event"), ReachGoal):
                 if side_counter["left"] > side_counter["right"]:
                     side_preferences[scenario]["left"] += 1
@@ -166,9 +173,9 @@ def evaluate(
         left_percentage = side_preferences[scenario]["left"] / n_test_cases
         right_percentage = side_preferences[scenario]["right"] / n_test_cases
 
-        logging.info(f"success rate: {(n_success/n_test_cases):.2f}")
-        logging.info(f"collision rate: {(n_collision/n_test_cases):.2f}")
-        logging.info(f"timeout rate: {(n_timeout/n_test_cases):.2f}")
+        logging.info(f"success rate: {(n_success/n_test_cases):.3f}")
+        logging.info(f"collision rate: {(n_collision/n_test_cases):.3f}")
+        logging.info(f"timeout rate: {(n_timeout/n_test_cases):.3f}")
 
         metrics.add_metric("navigation time", success_times)
         metrics.add_metric("path length", path_lengths)
@@ -204,6 +211,7 @@ def evaluate(
                 obs["temporal_edges"][0, 0, 0].cpu().numpy(),
             )  # robot theta
 
+            total_render_time = 0
             while not done:
                 step_counter += 1
                 with torch.no_grad():
@@ -216,7 +224,9 @@ def evaluate(
                 if not done:
                     global_time = base_env.global_time
                 if visualize:
+                    start = time.time()
                     eval_envs.render()
+                    total_render_time += time.time() - start
 
                 # Obser reward and next obs
                 obs, step_reward, done, step_info = eval_envs.step(action)
@@ -271,7 +281,7 @@ def evaluate(
             print("")
             print("Reward={}".format(episode_reward))
             print("Episode", k, "ends in", step_counter, "steps")
-
+            print(f"Average FPS = {1 / (total_render_time / step_counter):.3f}")
             if isinstance(step_info[0].get("info").get("event"), ReachGoal):
                 success_times.append(global_time)
                 chc_total.append(episode_chc)

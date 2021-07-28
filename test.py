@@ -138,7 +138,7 @@ def main():
             torch.backends.cudnn.benchmark = True
             torch.backends.cudnn.deterministic = False
 
-    torch.set_num_threads(1)
+    torch.set_num_threads(torch.get_num_threads())
     device = torch.device("cuda" if config.training.cuda else "cpu")
 
     logging.info("Create other envs with new settings")
@@ -150,8 +150,8 @@ def main():
         ax.set_ylim(-val / 2, val / 2)
         ax.set_xlabel("x(m)", fontsize=16)
         ax.set_ylabel("y(m)", fontsize=16)
-        plt.ion()
-        plt.show()
+        plt.show(block=False)
+        plt.pause(0.1)
     else:
         ax = None
 
@@ -177,6 +177,7 @@ def main():
         config=config,
         ax=ax,
         test_case=test_args.test_case,
+        fig=fig
     )
 
     actor_critic = Policy(

@@ -41,6 +41,7 @@ def make_env(
     envNum=1,
     ax=None,
     test_case=-1,
+    fig=None
 ):
     def _thunk():
         if env_id.startswith("dm"):
@@ -54,7 +55,12 @@ def make_env(
         )
         if is_atari:
             env = make_atari(env_id)
-
+        if fig:
+            env.render_figure = fig
+        if ax:
+            env.render_axis = ax
+            if test_case >= 0:
+                env.test_case = test_case
         env.configure(config)
 
         envSeed = seed + rank if seed is not None else None
@@ -66,10 +72,6 @@ def make_env(
         else:
             env.phase = "test"
 
-        if ax:
-            env.render_axis = ax
-            if test_case >= 0:
-                env.test_case = test_case
         env.seed(seed + rank)
 
         if str(env.__class__.__name__).find("TimeLimit") >= 0:
@@ -113,6 +115,7 @@ def make_vec_envs(
     config=None,
     ax=None,
     test_case=-1,
+    fig=None
 ):
     envs = [
         make_env(
@@ -125,6 +128,7 @@ def make_vec_envs(
             envNum=num_processes,
             ax=ax,
             test_case=test_case,
+            fig=fig
         )
         for i in range(num_processes)
     ]

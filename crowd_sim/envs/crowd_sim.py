@@ -14,6 +14,7 @@ from crowd_sim.envs.utils.helper import VelocityRectangle, vec_norm
 
 
 from crowd_nav.policy.policy_factory import policy_factory
+from matplotlib import pyplot as plt
 
 
 class CrowdSim(gym.Env):
@@ -69,6 +70,8 @@ class CrowdSim(gym.Env):
 
         # for render
         self.render_axis = None
+        self.render_figure = None
+        self.render_bg = None
 
         self.humans = []
 
@@ -173,6 +176,17 @@ class CrowdSim(gym.Env):
 
         self.last_acceleration = (0, 0)
         self.robot_VR = None
+
+        # grab the background on every draw
+        self.render_bg = self.render_figure.canvas.copy_from_bbox(
+            self.render_figure.bbox
+        )
+        # dummy object for matplotlib
+        dummy_art = plt.Circle((0, 0), 0.5, fill=True, color="b")
+        # draw the animated artist, this uses a cached renderer
+        # this allows ax.draw_artist to work later
+        self.render_axis.draw_artist(dummy_art)
+        self.render_figure.canvas.blit(self.render_figure.bbox)
         return
 
     def set_robot(self, robot):
@@ -871,8 +885,9 @@ class CrowdSim(gym.Env):
                 else:
                     side_preference["right"] = 1
             step_info[scenario] = side_preference
-            step_info["separation"] = vec_norm(h.get_position(), self.robot.get_position())
-
+            step_info["separation"] = vec_norm(
+                h.get_position(), self.robot.get_position()
+            )
 
         # check if reaching the goal
         reaching_goal = self.robot.reached_destination()
@@ -1072,6 +1087,9 @@ class CrowdSim(gym.Env):
         import matplotlib.text as mtext
         from matplotlib import patches
 
+        # reset the background back in the canvas state, screen unchanged
+        self.render_figure.canvas.restore_region(self.render_bg)
+
         plt.rcParams["animation.ffmpeg_path"] = "/usr/bin/ffmpeg"
 
         robot_color = "yellow"
@@ -1097,7 +1115,17 @@ class CrowdSim(gym.Env):
             return newPoint
 
         ax = self.render_axis
-        artists = []
+        artists = set()
+
+        ###### START ROBOT DRAWING ######
+
+        if self.robot_VR is not None:
+            polygon = patches.Polygon(
+                xy=self.robot_VR._vel_rect.exterior.coords, fill=False
+            )
+            polygon.set_animated(True)
+            ax.add_artist(polygon)
+            artists.add(polygon)
 
         # add goal
         goal = mlines.Line2D(
@@ -1109,59 +1137,49 @@ class CrowdSim(gym.Env):
             markersize=15,
             label="Goal",
         )
+        goal.set_animated(False)
         ax.add_artist(goal)
-        artists.append(goal)
+        artists.add(goal)
 
         # add robot
         robotX, robotY = self.robot.get_position()
-
         robot = plt.Circle(
             (robotX, robotY), self.robot.radius, fill=True, color=robot_color
         )
+        robot.set_animated(True)
         ax.add_artist(robot)
-        artists.append(robot)
+        artists.add(robot)
 
+        # how do we blit this?
         plt.legend([robot, goal], ["Robot", "Goal"], fontsize=16)
 
-        # compute orientation in each step and add arrow to show the direction
-        radius = self.robot.radius
-        arrowStartEnd = []
-
-        robot_theta = (
-            self.robot.theta
-            if self.robot.kinematics == "unicycle"
-            else np.arctan2(self.robot.vy, self.robot.vx)
+        robot_speed = mtext.Text(
+            self.robot.get_position()[0],
+            self.robot.get_position()[1] + self.robot.radius,
+            f"{vec_norm(self.robot.get_velocity(), [0, 0]):.2f}",
+            ha="center",
+            fontsize=9,
         )
+        robot_speed.set_animated(True)
+        ax.add_artist(robot_speed)
+        artists.add(robot_speed)
 
-        arrowStartEnd.append(
-            (
-                (robotX, robotY),
-                (
-                    robotX + radius * np.cos(robot_theta),
-                    robotY + radius * np.sin(robot_theta),
-                ),
-            )
-        )
-
-        for i, human in enumerate(self.humans):
-            theta = np.arctan2(human.vy, human.vx)
-            arrowStartEnd.append(
-                (
-                    (human.px, human.py),
-                    (
-                        human.px + radius * np.cos(theta),
-                        human.py + radius * np.sin(theta),
-                    ),
-                )
-            )
-
-        arrows = [
-            patches.FancyArrowPatch(*arrow, color=arrow_color, arrowstyle=arrow_style)
-            for arrow in arrowStartEnd
+        if "unicycle" in self.robot.kinematics:
+            robot_theta = self.robot.theta
+        else:
+            robot_theta = np.arctan2(self.robot.vy, self.robot.vx)
+        arrow_start = self.robot.get_position()
+        arrow_end = [
+            self.robot.px + self.robot.radius * np.cos(robot_theta),
+            self.robot.py + self.robot.radius * np.sin(robot_theta),
         ]
-        for arrow in arrows:
-            ax.add_artist(arrow)
-            artists.append(arrow)
+        arrow_patch = patches.FancyArrowPatch(
+            posA=arrow_start, posB=arrow_end, color=arrow_color, arrowstyle=arrow_style
+        )
+
+        arrow_patch.set_animated(True)
+        ax.add_artist(arrow_patch)
+        artists.add(arrow_patch)
 
         # draw FOV for the robot
         # add robot FOV
@@ -1172,8 +1190,8 @@ class CrowdSim(gym.Env):
 
             startPointX = robotX
             startPointY = robotY
-            endPointX = robotX + radius * np.cos(robot_theta)
-            endPointY = robotY + radius * np.sin(robot_theta)
+            endPointX = robotX + self.robot.radius * np.cos(robot_theta)
+            endPointY = robotY + self.robot.radius * np.sin(robot_theta)
 
             # transform the vector back to world frame origin, apply rotation matrix, and get end point of FOVLine
             # the start point of the FOVLine is the center of the robot
@@ -1192,61 +1210,75 @@ class CrowdSim(gym.Env):
             FOVLine2.set_xdata(np.array([startPointX, startPointX + FOVEndPoint2[0]]))
             FOVLine2.set_ydata(np.array([startPointY, startPointY + FOVEndPoint2[1]]))
 
+            FOVLine1.set_animated(True)
             ax.add_artist(FOVLine1)
+            artists.add(FOVLine1)
+
+            FOVLine2.set_animated(True)
             ax.add_artist(FOVLine2)
-            artists.append(FOVLine1)
-            artists.append(FOVLine2)
+            artists.add(FOVLine2)
 
-        # add humans and change the color of them based on visibility
-        human_circles = [
-            plt.Circle(human.get_position(), human.radius, fill=False)
-            for human in self.humans
-        ]
-
-        for i in range(len(self.humans)):
-            ax.add_artist(human_circles[i])
-            artists.append(human_circles[i])
-
-            # green: visible; red: invisible
-            if self.detect_visible(self.robot, self.humans[i], robot1=True):
-                human_circles[i].set_color(c="g")
+        ###### END DRAWING ROBOT ######
+        ###### START DRAWING HUMANS ######
+        for idx, human in enumerate(self.humans):
+            if "unicycle" in human.kinematics:
+                theta = human.theta
             else:
-                human_circles[i].set_color(c="r")
+                theta = np.arctan2(human.vy, human.vx)
 
-            # show human speed
-            h_px, h_py = self.humans[i].get_position()
-            human_speed = vec_norm(self.humans[i].get_velocity(), [0, 0])
-            if human_speed > 0:
+            arrow_start = human.get_position()
+            arrow_end = [
+                human.px + human.radius * np.cos(theta),
+                human.py + human.radius * np.sin(theta),
+            ]
+            arrow_patch = patches.FancyArrowPatch(
+                posA=arrow_start,
+                posB=arrow_end,
+                color=arrow_color,
+                arrowstyle=arrow_style,
+            )
+
+            human_circle = plt.Circle(human.get_position(), human.radius, fill=False)
+
+            speed = vec_norm(human.get_velocity(), [0, 0])
+            human_speed_text = None
+            if speed > 0:
+                arrow_patch.set_animated(True)
+                human_circle.set_animated(True)
+
                 human_speed_text = mtext.Text(
-                    h_px,
-                    h_py + self.humans[i].radius,
-                    f"{human_speed:.2f}",
+                    human.get_position()[0],
+                    human.get_position()[1] + human.radius,
+                    f"{speed:.2f}",
                     ha="center",
                     fontsize=9,
                 )
+                human_speed_text.set_animated(True)
+
                 ax.add_artist(human_speed_text)
-                artists.append(human_speed_text)
-            # plt.text(self.humans[i].px - 0.1, self.humans[i].py - 0.1, str(i), color='black', fontsize=12)
+                artists.add(human_speed_text)
+            else:
+                arrow_patch.set_animated(False)
+                human_circle.set_animated(False)
 
-        robot_speed = mtext.Text(
-            self.robot.get_position()[0],
-            self.robot.get_position()[1] + self.robot.radius,
-            f"{vec_norm(self.robot.get_velocity(), [0, 0]):.2f}",
-            ha="center",
-            fontsize=9,
-        )
-        ax.add_artist(robot_speed)
-        artists.append(robot_speed)
+            # green: visible; red: invisible
+            if self.detect_visible(self.robot, human, robot1=True):
+                human_circle.set_color(c="g")
+            else:
+                human_circle.set_color(c="r")
 
-        from matplotlib import patches
-        if self.robot_VR is not None:
-            polygon = patches.Polygon(xy=self.robot_VR._vel_rect.exterior.coords, fill=False)
-            ax.add_artist(polygon)
-            artists.append(polygon)
+            ax.add_artist(arrow_patch)
+            artists.add(arrow_patch)
 
-        plt.pause(0.01)
-        for item in artists:
-            item.remove()  # there should be a better way to do this. For example,
-            # initially use add_artist and draw_artist later on
-        # for t in ax.texts:
-        #     t.set_visible(False)
+            ax.add_artist(human_circle)
+            artists.add(human_circle)
+
+        ###### END DRAWING HUMANS ######
+        # could we speed up further by removing this loop?
+        for art in artists:
+            self.render_axis.draw_artist(art)
+
+        # copy the image to the GUI state, but screen might not be changed yet
+        self.render_figure.canvas.blit(self.render_figure.bbox)
+        # flush any pending GUI events, re-painting the screen if needed
+        self.render_figure.canvas.flush_events()
