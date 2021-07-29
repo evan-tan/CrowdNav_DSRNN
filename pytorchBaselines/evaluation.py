@@ -1,11 +1,13 @@
+import time
+
 import numpy as np
 import torch
+from crowd_sim.envs.utils.info import Collision, Danger, Nothing, ReachGoal, Timeout
+from matplotlib import pyplot as plt
 
-from crowd_sim.envs.utils.info import Timeout, ReachGoal, Danger, Collision, Nothing
 from pytorchBaselines.a2c_ppo_acktr import utils
 from pytorchBaselines.metrics import Metrics
-from matplotlib import pyplot as plt
-import time
+
 
 def evaluate(
     actor_critic,
@@ -148,7 +150,8 @@ def evaluate(
             print("")
             print("Reward={}".format(episode_reward))
             print("Episode", i, "ends in", step_counter, "steps")
-            print(f"Average FPS = {1 / (total_render_time / step_counter):.3f}")
+            if visualize:
+                print(f"Average FPS = {1 / (total_render_time / step_counter):.3f}")
 
             if isinstance(step_info[0].get("info").get("event"), ReachGoal):
                 if side_counter["left"] > side_counter["right"]:
@@ -281,7 +284,9 @@ def evaluate(
             print("")
             print("Reward={}".format(episode_reward))
             print("Episode", k, "ends in", step_counter, "steps")
-            print(f"Average FPS = {1 / (total_render_time / step_counter):.3f}")
+            if visualize:
+                print(f"Average FPS = {1 / (total_render_time / step_counter):.3f}")
+
             if isinstance(step_info[0].get("info").get("event"), ReachGoal):
                 success_times.append(global_time)
                 chc_total.append(episode_chc)

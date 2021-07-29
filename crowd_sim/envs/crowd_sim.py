@@ -1,20 +1,21 @@
 import logging
-import gym
-import numpy as np
 import random
 
-
-from numpy.linalg import norm
-from crowd_sim.envs.utils.human import Human
-from crowd_sim.envs.utils.robot import Robot
-from crowd_sim.envs.utils.info import *
+import gym
+import matplotlib.lines as mlines
+import matplotlib.pyplot as plt
+import matplotlib.text as mtext
+import numpy as np
 from crowd_nav.policy.orca import ORCA
-from crowd_sim.envs.utils.state import *
-from crowd_sim.envs.utils.helper import VelocityRectangle, vec_norm
-
-
 from crowd_nav.policy.policy_factory import policy_factory
-from matplotlib import pyplot as plt
+from matplotlib import patches
+from numpy.linalg import norm
+
+from crowd_sim.envs.utils.helper import VelocityRectangle, vec_norm
+from crowd_sim.envs.utils.human import Human
+from crowd_sim.envs.utils.info import *
+from crowd_sim.envs.utils.robot import Robot
+from crowd_sim.envs.utils.state import *
 
 
 class CrowdSim(gym.Env):
@@ -177,16 +178,17 @@ class CrowdSim(gym.Env):
         self.last_acceleration = (0, 0)
         self.robot_VR = None
 
-        # grab the background on every draw
-        self.render_bg = self.render_figure.canvas.copy_from_bbox(
-            self.render_figure.bbox
-        )
-        # dummy object for matplotlib
-        dummy_art = plt.Circle((0, 0), 0.5, fill=True, color="b")
-        # draw the animated artist, this uses a cached renderer
-        # this allows ax.draw_artist to work later
-        self.render_axis.draw_artist(dummy_art)
-        self.render_figure.canvas.blit(self.render_figure.bbox)
+        if self.render_figure:
+            # grab the background on every draw
+            self.render_bg = self.render_figure.canvas.copy_from_bbox(
+                self.render_figure.bbox
+            )
+            # dummy object for matplotlib
+            dummy_art = plt.Circle((0, 0), 0.5, fill=True, color="b")
+            # draw the animated artist, this uses a cached renderer
+            # this allows ax.draw_artist to work later
+            self.render_axis.draw_artist(dummy_art)
+            self.render_figure.canvas.blit(self.render_figure.bbox)
         return
 
     def set_robot(self, robot):
@@ -1082,11 +1084,6 @@ class CrowdSim(gym.Env):
         return ob, reward, done, info
 
     def render(self, mode="human"):
-        import matplotlib.pyplot as plt
-        import matplotlib.lines as mlines
-        import matplotlib.text as mtext
-        from matplotlib import patches
-
         # reset the background back in the canvas state, screen unchanged
         self.render_figure.canvas.restore_region(self.render_bg)
 

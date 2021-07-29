@@ -1,19 +1,22 @@
-import logging
 import argparse
-import numpy as np
+import logging
 import sys
-from matplotlib import pyplot as plt
+
 import matplotlib
+import numpy as np
+from matplotlib import pyplot as plt
 
 matplotlib.use("TkAgg")
+from importlib import import_module
+from pathlib import Path
+
 import torch
 import torch.nn as nn
-from pathlib import Path
-from importlib import import_module
-from pytorchBaselines.a2c_ppo_acktr.envs import make_vec_envs
-from pytorchBaselines.evaluation import evaluate
+
 from crowd_sim import *
+from pytorchBaselines.a2c_ppo_acktr.envs import make_vec_envs
 from pytorchBaselines.a2c_ppo_acktr.model import Policy
+from pytorchBaselines.evaluation import evaluate
 
 
 def main():
@@ -21,7 +24,7 @@ def main():
     test_parser = argparse.ArgumentParser("Parser for test.py", add_help=True)
     # the model directory that we are testing
     test_parser.add_argument("--model_dir", type=str, default="data/example_model")
-    test_parser.add_argument("--visualize", default=True, action="store_true")
+    test_parser.add_argument("--visualize", action="store_true")
     test_parser.add_argument(
         "--test_case",
         type=int,
@@ -166,6 +169,7 @@ def main():
     if not eval_dir.exists():
         eval_dir.mkdir()
 
+    render_fig = fig if test_args.visualize else None
     envs = make_vec_envs(
         env_name,
         config.env.seed,
@@ -177,7 +181,7 @@ def main():
         config=config,
         ax=ax,
         test_case=test_args.test_case,
-        fig=fig
+        fig=render_fig
     )
 
     actor_critic = Policy(
