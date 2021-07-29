@@ -16,7 +16,7 @@ class Config(object):
 
     env = BaseConfig()
     env.env_name = "CrowdSimDict-v0"  # name of the environment
-    env.time_limit = 50 if not test.side_preference else 30
+    env.time_limit = 50
     env.time_step = 0.1
     env.val_size = 100
     env.test_size = 500
