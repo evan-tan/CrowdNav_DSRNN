@@ -1,25 +1,25 @@
-import sys
-import os
 import logging
-from pathlib import Path
+import os
 import shutil
+import sys
 import time
 from collections import deque
+from datetime import datetime
+from pathlib import Path
+
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
-import pandas as pd
-import matplotlib.pyplot as plt
-from datetime import datetime
-from pytorchBaselines.a2c_ppo_acktr import algo, utils
-
-from pytorchBaselines.a2c_ppo_acktr.envs import make_vec_envs
-from pytorchBaselines.a2c_ppo_acktr.model import Policy
-from pytorchBaselines.a2c_ppo_acktr.storage import RolloutStorage
-
+from torch.utils.tensorboard import SummaryWriter
 
 from crowd_nav.configs.config import Config
 from crowd_sim import *
+from pytorchBaselines.a2c_ppo_acktr import algo, utils
+from pytorchBaselines.a2c_ppo_acktr.envs import make_vec_envs
+from pytorchBaselines.a2c_ppo_acktr.model import Policy
+from pytorchBaselines.a2c_ppo_acktr.storage import RolloutStorage
 
 
 def main():
@@ -179,6 +179,9 @@ def main():
         // config.ppo.num_steps
         // config.training.num_processes
     )
+    tboard_logdir = config.training.output_dir + "/events"
+    tboard_logdir = tboard_logdir.replace("//", "/")
+    writer = SummaryWriter(log_dir=tboard_logdir)
     start_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     for j in range(num_updates):
 
@@ -309,6 +312,19 @@ def main():
                 }
             )
 
+            # tensorboard logs
+            writer.add_scalar("mean_reward", np.mean(episode_rewards), total_num_steps)
+            writer.add_scalar(
+                "median_reward", np.median(episode_rewards), total_num_steps
+            )
+            writer.add_scalar("min_reward", np.min(episode_rewards), total_num_steps)
+            writer.add_scalar("max_reward", np.max(episode_rewards), total_num_steps)
+            writer.add_scalar(
+                "policy_entropy (dist_entropy)", dist_entropy, total_num_steps
+            )
+            writer.add_scalar("policy_loss (action_loss)", action_loss, total_num_steps)
+            writer.add_scalar("value_loss", value_loss, total_num_steps)
+
             if (
                 os.path.exists(os.path.join(config.training.output_dir, "progress.csv"))
                 and j > 20
@@ -329,6 +345,7 @@ def main():
     end_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     logging.info("START @ " + start_time)
     logging.info("END @ " + end_time)
+
 
 if __name__ == "__main__":
     main()

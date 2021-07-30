@@ -45,6 +45,9 @@ def main():
         default="",
         help="Name of config module to load. Use config to use config.py, or leave blank to use train_config",
     )
+    test_parser.add_argument(
+        "--num_threads", type=int, default=1, help="Number of threads to allocate"
+    )
     test_args = test_parser.parse_args()
 
     model_dir_temp = test_args.model_dir
@@ -141,7 +144,7 @@ def main():
             torch.backends.cudnn.benchmark = True
             torch.backends.cudnn.deterministic = False
 
-    torch.set_num_threads(torch.get_num_threads())
+    torch.set_num_threads(test_args.num_threads)
     device = torch.device("cuda" if config.training.cuda else "cpu")
 
     logging.info("Create other envs with new settings")
@@ -181,7 +184,7 @@ def main():
         config=config,
         ax=ax,
         test_case=test_args.test_case,
-        fig=render_fig
+        fig=render_fig,
     )
 
     actor_critic = Policy(
