@@ -19,7 +19,7 @@ class Config(object):
     env.time_limit = 50
     env.time_step = 0.25
     env.val_size = 100
-    env.test_size = 500
+    env.test_size = 500 if not test.social_metrics else 2000
     env.randomize_attributes = True
     env.seed = 0  # env random seed
 
@@ -32,6 +32,8 @@ class Config(object):
     reward.discomfort_dist_back = 0.25
     reward.discomfort_penalty_factor = 10
     reward.gamma = 0.99  # discount factor for rewards
+    # from SA-CADRL
+    reward.social_zone_penalty = -0.05
 
     sim = BaseConfig()
     sim.render = False  # show GUI for visualization

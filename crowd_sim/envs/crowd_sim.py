@@ -176,7 +176,7 @@ class CrowdSim(gym.Env):
         self.set_robot(rob_RL)
 
         self.last_acceleration = (0, 0)
-        self.robot_VR = None
+        self.robot_VR = None  # robot velocity rectangle
 
         if self.render_figure:
             # grab the background on every draw
@@ -449,7 +449,9 @@ class CrowdSim(gym.Env):
             if self.group_human:
                 # set the robot in a dummy far away location to avoid collision with humans
                 if self.config.test.social_metrics:
-                    self.robot.set(0, -self.circle_radius, 0, self.circle_radius, 0, 0, np.pi / 2)
+                    self.robot.set(
+                        0, -self.circle_radius, 0, self.circle_radius, 0, 0, np.pi / 2
+                    )
                 else:
                     self.robot.set(10, 10, 10, 10, 0, 0, np.pi / 2)
 
@@ -532,7 +534,15 @@ class CrowdSim(gym.Env):
                 # randomize starting position and goal position
                 else:
                     if self.config.test.social_metrics:
-                        self.robot.set(0, -self.circle_radius, 0, self.circle_radius, 0, 0, np.pi / 2)
+                        self.robot.set(
+                            0,
+                            -self.circle_radius,
+                            0,
+                            self.circle_radius,
+                            0,
+                            0,
+                            np.pi / 2,
+                        )
                     else:
                         while True:
                             px, py, gx, gy = np.random.uniform(
@@ -552,9 +562,7 @@ class CrowdSim(gym.Env):
         # 1 human and 1 robot, so the neural network needs to be able to handle
         # this by duplicating the observation of the human
         human = Human(self.config, "humans")
-        self.robot.set(
-            0, -self.circle_radius, 0, self.circle_radius, 0, 0, np.pi / 2
-        )
+        self.robot.set(0, -self.circle_radius, 0, self.circle_radius, 0, 0, np.pi / 2)
         scenario = self.config.test.side_preference_scenario
         for i in range(self.human_num):
             if scenario in ["passing", "overtaking"]:
@@ -1118,7 +1126,7 @@ class CrowdSim(gym.Env):
 
         if self.robot_VR is not None:
             polygon = patches.Polygon(
-                xy=self.robot_VR._vel_rect.exterior.coords, fill=False
+                xy=self.robot_VR._rect.exterior.coords, fill=False
             )
             polygon.set_animated(True)
             ax.add_artist(polygon)
