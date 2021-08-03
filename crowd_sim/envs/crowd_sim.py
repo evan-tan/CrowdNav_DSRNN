@@ -966,9 +966,10 @@ class CrowdSim(gym.Env):
             self.potential = -abs(potential_cur)
 
             cur_heading = np.arctan2(self.robot.vy, self.robot.vx)
-            d_theta = wrap_angle(cur_heading - self.last_heading)
+            d_theta = abs(wrap_angle(cur_heading - self.last_heading))
             self.last_heading = cur_heading
-            if abs(d_theta) > np.pi * 2 / 3:
+            theta_thresh = np.pi * 2 / 3
+            if d_theta >= theta_thresh:
                 reward += -d_theta
 
             done = False
