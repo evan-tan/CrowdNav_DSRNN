@@ -11,7 +11,12 @@ from crowd_nav.policy.policy_factory import policy_factory
 from matplotlib import patches
 from numpy.linalg import norm
 
-from crowd_sim.envs.utils.helper import VelocityRectangle, vec_norm
+from crowd_sim.envs.utils.helper import (
+    SocialZoneRectangle,
+    VelocityRectangle,
+    vec_norm,
+    wrap_angle,
+)
 from crowd_sim.envs.utils.human import Human
 from crowd_sim.envs.utils.info import *
 from crowd_sim.envs.utils.robot import Robot
@@ -176,6 +181,7 @@ class CrowdSim(gym.Env):
         self.set_robot(rob_RL)
 
         self.last_acceleration = (0, 0)
+        self.last_heading = 0
         self.robot_VR = None  # robot velocity rectangle
 
         if self.render_figure:
@@ -958,6 +964,12 @@ class CrowdSim(gym.Env):
             )
             reward = 2 * (-abs(potential_cur) - self.potential)
             self.potential = -abs(potential_cur)
+
+            cur_heading = np.arctan2(self.robot.vy, self.robot.vx)
+            d_theta = wrap_angle(cur_heading - self.last_heading)
+            self.last_heading = cur_heading
+            if abs(d_theta) > np.pi * 2 / 3:
+                reward += -d_theta
 
             done = False
             step_info["event"] = Nothing()
