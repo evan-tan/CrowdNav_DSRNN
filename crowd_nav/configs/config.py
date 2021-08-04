@@ -24,7 +24,7 @@ class Config(object):
     env.seed = 0  # env random seed
 
     reward = BaseConfig()
-    reward.normalize = True
+    reward.normalize = False
     reward.success_reward = 10 if not reward.normalize else 1
     reward.collision_penalty = -20 if not reward.normalize else -1
     reward.timeout_penalty = -20 if not reward.normalize else -1
