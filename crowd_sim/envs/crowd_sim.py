@@ -2,6 +2,7 @@ import logging
 import random
 
 import gym
+import matplotlib.legend as legend
 import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
 import matplotlib.text as mtext
@@ -12,8 +13,9 @@ from matplotlib import patches
 from numpy.linalg import norm
 
 from crowd_sim.envs.utils.helper import (
-    SocialZoneRectangle,
+    NormZoneRectangle,
     VelocityRectangle,
+    make_shapely_ellipse,
     vec_norm,
     wrap_angle,
 )
@@ -183,6 +185,9 @@ class CrowdSim(gym.Env):
         self.last_acceleration = (0, 0)
         self.last_heading = 0
         self.robot_VR = None  # robot velocity rectangle
+        self.left_NZ = None  # left norm zone
+        self.right_NZ = None  # right norm zone
+        self.max_dist_NZ = None
 
         if self.render_figure:
             # grab the background on every draw
@@ -857,8 +862,19 @@ class CrowdSim(gym.Env):
         collision = False
         step_info = dict()
         self.robot_VR = VelocityRectangle(self.robot)
+        self.left_NZ = NormZoneRectangle(self.robot, "left")
+        self.right_NZ = NormZoneRectangle(self.robot, "right")
+        if self.max_dist_NZ is None:
+            distances = []
+            for idx, zone in enumerate([self.left_NZ, self.right_NZ]):
+                for point in zone._rect.exterior.coords:
+                    distances.append(vec_norm([self.robot.px, self.robot.py], point))
+            self.max_dist_NZ = max(distances)
+
         vec_rect_violations = 0  # social zone violations
         aggregate_nav_time = 0
+        norm_zone_violated = False
+        robot_pos = self.robot.get_position()
 
         for i, human in enumerate(self.humans):
             dx = human.px - self.robot.px
@@ -873,6 +889,14 @@ class CrowdSim(gym.Env):
                 break
             elif closest_dist < dmin:
                 dmin = closest_dist
+
+            human_pos = human.get_position()
+            # check if norm zones violated
+            if vec_norm(human_pos, robot_pos) <= self.max_dist_NZ:
+                h_ellipse = make_shapely_ellipse(human.radius, human_pos)
+                for zone in [self.left_NZ, self.right_NZ]:
+                    if h_ellipse.intersects(zone._rect):
+                        norm_zone_violated = True
 
             # SOCIAL METRIC 2
             human_VR = VelocityRectangle(human)
@@ -962,7 +986,9 @@ class CrowdSim(gym.Env):
                 np.array([self.robot.px, self.robot.py])
                 - np.array(self.robot.get_goal_position())
             )
-            reward = 2 * (-abs(potential_cur) - self.potential)
+            reward = self.config.reward.potential_factor * (
+                -abs(potential_cur) - self.potential
+            )
             self.potential = -abs(potential_cur)
 
             cur_heading = np.arctan2(self.robot.vy, self.robot.vx)
@@ -1169,7 +1195,10 @@ class CrowdSim(gym.Env):
         artists.add(robot)
 
         # how do we blit this?
-        plt.legend([robot, goal], ["Robot", "Goal"], fontsize=16)
+        blit_legend = plt.legend([robot, goal], ["Robot", "Goal"], fontsize=16)
+        blit_legend.set_animated(False)
+        ax.add_artist(blit_legend)
+        artists.add(blit_legend)
 
         robot_speed = mtext.Text(
             self.robot.get_position()[0],

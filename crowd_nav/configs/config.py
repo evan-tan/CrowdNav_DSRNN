@@ -24,23 +24,26 @@ class Config(object):
     env.seed = 0  # env random seed
 
     reward = BaseConfig()
-    reward.success_reward = 10
-    reward.collision_penalty = -20
-    # discomfort distance for the front half of the robot
+    reward.normalize = True
+    reward.success_reward = 10 if not reward.normalize else 1
+    reward.collision_penalty = -20 if not reward.normalize else -1
+    reward.timeout_penalty = -20 if not reward.normalize else -1
+    # discomfort distance for the front half of the robot (UNUSED)
     reward.discomfort_dist_front = 0.25
     # discomfort distance for the back half of the robot
     reward.discomfort_dist_back = 0.25
-    reward.discomfort_penalty_factor = 10
+    reward.discomfort_penalty_factor = 10 if not reward.normalize else 16
+    reward.potential_factor = 2 if not reward.normalize else 0.1
     reward.gamma = 0.99  # discount factor for rewards
     # from SA-CADRL
-    reward.social_zone_penalty = -0.05
+    reward.norm_zone_penalty = -0.05
 
     sim = BaseConfig()
     sim.render = False  # show GUI for visualization
     sim.train_val_sim = "circle_crossing"
     sim.test_sim = "circle_crossing"
     sim.square_width = 20
-    sim.circle_radius = 6 if not test.side_preference and not test.social_metrics else 4
+    sim.circle_radius = 6 if not test.social_metrics else 4
     sim.human_num = 5 if not test.side_preference else 1
     # Group environment: set to true; FoV environment: false
     sim.group_human = False

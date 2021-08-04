@@ -31,6 +31,12 @@ def smooth_data(scalars: List[float], weight: float) -> List[float]:
     return smoothed
 
 
+def make_shapely_ellipse(radius, position, downsample=True):
+    ellipse = shapely.geometry.Point(position[0], position[1]).buffer(radius)
+    if downsample:
+        ellipse = ellipse.simplify(0.1)
+    return ellipse
+
 # https://shapely.readthedocs.io/en/stable/manual.html#shapely.geometry.box
 class Rectangle:
     def __init__(self, width, length):
@@ -86,14 +92,15 @@ class VelocityRectangle(Rectangle):
         self._translate(x_os, y_os)
 
 
-class SocialZoneRectangle(Rectangle):
+class NormZoneRectangle(Rectangle):
     LENGTH_SCALE = 1
     WIDTH_SCALE = 1
 
-    def __init__(self, agent: Agent, side=""):
+    def __init__(self, agent: Agent, side="", norm="rhs"):
         self._agent = agent
         assert agent is not None
         assert "left" in side or "right" in side
+        assert "lhs" in norm or "rhs" in norm
 
         # in agent.py [self.px, self.py, self.vx, self.vy, self.radius]
         properties = self._agent.get_observable_state_list()
@@ -110,13 +117,21 @@ class SocialZoneRectangle(Rectangle):
 
         super().__init__(rwidth, rlength)
 
+        # default behaviour for rhs norm
         # make "bottom edge" of rectangle touch horizontal axis, translate to left
-        if "left" in side:
-            # LHS of robot
-            self._translate(-rwidth / 2, rlength / 2)
-        elif "right" in side:
-            # RHS of robot and in front by
-            self._translate(rwidth / 2, rlength / 2 + 0.6)
+        if "rhs" in norm:
+            if "left" in side:
+                # LHS of robot
+                self._translate(-rwidth / 2, rlength / 2)
+            elif "right" in side:
+                # RHS of robot and translated forward by 0.6m
+                self._translate(rwidth / 2, rlength / 2 + 0.6)
+        elif "lhs" in norm:
+            if "left" in side:
+                self._translate(rwidth / 2, rlength / 2 + 0.6)
+            elif "right" in side:
+                self._translate(-rwidth / 2, rlength / 2)
+
         # rotate ABOUT (0,0) based on agent heading
         self._rotate(dtheta, (0, 0))
         # translate to get final rect
