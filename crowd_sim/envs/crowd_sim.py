@@ -991,12 +991,15 @@ class CrowdSim(gym.Env):
             )
             self.potential = -abs(potential_cur)
 
+            # potential_max = 2 * self.circle_radius
+            # reward = 1 - (potential_cur / potential_max) ** 0.4
+
             cur_heading = np.arctan2(self.robot.vy, self.robot.vx)
             d_theta = abs(wrap_angle(cur_heading - self.last_heading))
             self.last_heading = cur_heading
-            theta_thresh = np.pi * 2 / 3
-            if d_theta >= theta_thresh:
-                reward += -d_theta
+
+            # if norm_zone_violated:
+            #     reward += self.config.reward.norm_zone_penalty
 
             done = False
             step_info["event"] = Nothing()
@@ -1098,7 +1101,6 @@ class CrowdSim(gym.Env):
 
         # compute reward and episode info
         reward, done, step_info = self.calc_reward(action)
-
         # apply action and update all agents
         self.robot.step(action)
         for i, human_action in enumerate(human_actions):
