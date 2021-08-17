@@ -991,12 +991,7 @@ class CrowdSim(gym.Env):
             )
             self.potential = -abs(potential_cur)
 
-            # potential_max = 2 * self.circle_radius
-            # reward = 1 - (potential_cur / potential_max) ** 0.4
-
-            cur_heading = np.arctan2(self.robot.vy, self.robot.vx)
-            d_theta = abs(wrap_angle(cur_heading - self.last_heading))
-            self.last_heading = cur_heading
+            # reward = 1 - (potential_cur / self.config.sim.square_width) ** 0.4
 
             # if norm_zone_violated:
             #     reward += self.config.reward.norm_zone_penalty
