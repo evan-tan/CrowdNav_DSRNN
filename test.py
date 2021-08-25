@@ -29,7 +29,7 @@ def main():
         "--test_case",
         type=int,
         default=-1,
-        help="if -1 is used, it will run 500 different cases; if >=0, it will run the specified test case repeatedly",
+        help="if -1 is used, it will run 500 different cases; if specified, it will run the specified test case 5 times repeatedly",
     )
     # model weight file you want to test
     test_parser.add_argument("--test_model", type=str, default=None)
@@ -127,6 +127,8 @@ def main():
         format="%(asctime)s, %(levelname)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+    if test_args.test_case != -1:
+        config.env.test_size = 5
     test_cases_str = "all" if test_args.test_case == -1 else str(test_args.test_case)
     logging.info("Test Cases: " + test_cases_str)
     logging.info("robot FOV %f", config.robot.FOV * np.pi)
@@ -200,7 +202,7 @@ def main():
     nn.DataParallel(actor_critic).to(device)
 
     # actor_critic, ob_rms, eval_envs, num_processes, device, num_episodes
-    evaluate(
+    raw_rewards, discounted_rewards, dist_to_goal = evaluate(
         actor_critic=actor_critic,
         ob_rms=False,
         eval_envs=envs,
@@ -211,6 +213,42 @@ def main():
         visualize=test_args.visualize,
         recurrent_type=recurrent_cell,
     )
+
+    # plot cumulative reward vs time step
+    metrics = [raw_rewards, discounted_rewards, dist_to_goal]
+    COLORS = ("b", "g", "r", "c", "m", "y", "k", "w")
+    fig1, ax1 = plt.subplots()
+    fig2, ax2 = plt.subplots()
+    ax1.set_xlabel("Time step")
+    ax2.set_xlabel("Time step")
+    for i, metric in enumerate(metrics):
+        for key in metric:
+            # fetch from the correct bin
+            if len(metric[key]) > 0:
+                time_ = np.linspace(0, len(metric[key][0]), len(metric[key][0]))
+
+                if i == 0:
+                    y_label = "Cumulative Reward (Raw)"
+                    f_name = "cr_raw"
+                elif i == 1:
+                    y_label = "Cumulative Reward (Discounted)"
+                    f_name = "cr_disc"
+                elif i == 2:
+                    y_label = "Dist To Goal"
+                    f_name = "d2g"
+                y_data = metric[key] if i == 2 else np.cumsum(metric[key])
+                if i == 2:
+                    ax2.set_title("Distance To Goal VS Time")
+                    ax2.scatter(time_, y_data, color=COLORS[i], s=1, label=y_label)
+                else:
+                    ax1.set_title("Cumulative Rewards VS Time")
+                    ax1.scatter(time_, y_data, color=COLORS[i], s=1, label=y_label)
+
+    ax1.legend(loc="lower right")
+    ax2.legend(loc="lower left")
+    fig1.savefig(f"{str(log_dir)}/rewards_vs_time_{key}_case_{test_args.test_case}", dpi=1200)
+    fig2.savefig(f"{str(log_dir)}/d2g_vs_time_{key}_case_{test_args.test_case}", dpi=1200)
+    plt.show()
 
 
 if __name__ == "__main__":

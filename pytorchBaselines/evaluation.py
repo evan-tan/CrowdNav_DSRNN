@@ -1,4 +1,5 @@
 import time
+from copy import deepcopy
 
 import numpy as np
 import torch
@@ -57,8 +58,10 @@ def evaluate(
     timeout_times = []
     timeout_cases = []
 
-    all_rewards = []
-    cumulative_rewards = []
+    metric_bin = {"success": [], "collision": [], "timeout": []}
+    raw_rewards = deepcopy(metric_bin)
+    discounted_rewards = deepcopy(metric_bin)
+    dist_to_goal = deepcopy(metric_bin)
 
     path_lengths = []
     chc_total = []  # cumulative heading change
@@ -87,9 +90,9 @@ def evaluate(
     test_size = config.env.test_size if not config.test.side_preference else 200
     for k in range(test_size):
         done = False
-        rewards = []
+        episode_rewards = []
+        episode_d2g = []  # episode distance to goal
         step_counter = 0
-        episode_reward = 0
 
         global_time = 0.0
         episode_path = 0.0
@@ -154,9 +157,7 @@ def evaluate(
                 dtype=torch.float32,
                 device=device,
             )
-
-            rewards.append(step_reward)
-            episode_reward += step_reward[0]
+            episode_rewards.append(step_reward.item())
 
             if config.test.side_preference:
                 if step_info[0].get("info").get(scenario) is not None:
@@ -166,24 +167,27 @@ def evaluate(
                     elif curr_scenario.get("right") == 1:
                         side_counter["right"] += 1
 
-            for info in step_info:
-                if "episode" in info.keys():
-                    all_rewards.append(info["episode"]["r"])
             if step_info[0].get("info").get("personal_violation") == 1:
                 personal_violation_time += base_env.time_step
             if step_info[0].get("info").get("path_violation"):
-                path_violation_time += base_env.time_step * step_info[0].get("info").get("path_violation")
+                path_violation_time += base_env.time_step * step_info[0].get(
+                    "info"
+                ).get("path_violation")
             if step_info[0].get("info").get("aggregate_nav_time"):
-                aggregate_nav_time += base_env.time_step * step_info[0].get("info").get("aggregate_nav_time")
+                aggregate_nav_time += base_env.time_step * step_info[0].get("info").get(
+                    "aggregate_nav_time"
+                )
             if step_info[0].get("info").get("jerk_cost"):
                 jerk_cost += step_info[0]["info"].get("jerk_cost")
             if step_info[0].get("info").get("speed_violation") == 1:
                 speed_violation_time += base_env.time_step
 
+            if step_info[0].get("info").get("dist_to_goal"):
+                episode_d2g.append(step_info[0].get("info").get("dist_to_goal"))
+
         # END OF SINGLE EPISODE
 
         print("")
-        print("Reward={}".format(episode_reward))
         print("Episode", k, "ends in", step_counter, "steps")
         if visualize:
             print(f"Average FPS = {1 / (total_render_time / step_counter):.3f}")
@@ -193,10 +197,18 @@ def evaluate(
             for k in side_counter.keys():
                 side_counter[k] /= step_counter
 
+        tmp_disc_reward = [
+            pow(gamma, t * base_env.robot.time_step * base_env.robot.v_pref) * reward
+            for t, reward in enumerate(episode_rewards)
+        ]
+
         if isinstance(step_info[0].get("info").get("event"), ReachGoal):
             success_times.append(global_time)
             success_cases.append(k)
 
+            discounted_rewards["success"].append(tmp_disc_reward)
+            raw_rewards["success"].append(episode_rewards)
+            dist_to_goal["success"].append(episode_d2g)
             chc_total.append(episode_chc)
             path_lengths.append(episode_path)
 
@@ -216,37 +228,31 @@ def evaluate(
         elif isinstance(step_info[0].get("info").get("event"), Collision):
             collision_cases.append(k)
             collision_times.append(global_time)
+            discounted_rewards["collision"].append(tmp_disc_reward)
+            raw_rewards["collision"].append(episode_rewards)
+            dist_to_goal["collision"].append(episode_d2g)
             print("Collision")
         elif isinstance(step_info[0].get("info").get("event"), Timeout):
             timeout_cases.append(k)
             timeout_times.append(base_env.time_limit)
+            discounted_rewards["timeout"].append(tmp_disc_reward)
+            raw_rewards["timeout"].append(episode_rewards)
+            dist_to_goal["timeout"].append(episode_d2g)
             print("Time out")
         else:
             raise ValueError("Invalid end signal from environment")
 
         # reward tensor
-        print(f"Reward: {episode_reward[0]:.2f}")
+        print(f"Reward={sum(episode_rewards)}")
         print(f"Path Length: {episode_path:.2f}")
         print(f"Time Taken: {global_time:.2f}")
 
-        cumulative_rewards.append(
-            sum(
-                [
-                    pow(gamma, t * base_env.robot.time_step * base_env.robot.v_pref)
-                    * reward
-                    for t, reward in enumerate(rewards)
-                ]
-            )
-        )
-
-
+    # END OF ALL EPISODES
 
     success_rate = len(success_times) / test_size
     collision_rate = len(collision_times) / test_size
     timeout_rate = len(timeout_times) / test_size
-    assert (
-        len(success_times) + len(collision_times) + len(timeout_times) == test_size
-    )
+    assert len(success_times) + len(collision_times) + len(timeout_times) == test_size
 
     phase = "test"
     logging.info(f"{phase.upper()}")
@@ -271,8 +277,18 @@ def evaluate(
 
     metrics.add_metric("navigation time", success_times)
     metrics.add_metric("path length", path_lengths)
-    metrics.add_metric("time weighted reward", cumulative_rewards)
-    metrics.add_metric("all rewards", all_rewards)
+
+    mean_discounted_rew = []
+    mean_raw_rew = []
+    for key in raw_rewards:
+        # sum step rewards across all episodes
+        for ep_raw_rewards in raw_rewards[key]:
+            mean_raw_rew.append(sum(ep_raw_rewards))
+        for ep_disc_rewards in discounted_rewards[key]:
+            mean_discounted_rew.append(sum(ep_disc_rewards))
+
+    metrics.add_metric("discounted reward", mean_discounted_rew)
+    metrics.add_metric("non-discounted rewards", mean_raw_rew)
     metrics.add_metric("cumulative heading change", chc_total)
 
     # social conformity metrics
@@ -291,3 +307,5 @@ def evaluate(
     metrics.log_metrics()
 
     eval_envs.close()
+
+    return raw_rewards, discounted_rewards, dist_to_goal
