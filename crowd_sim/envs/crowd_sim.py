@@ -998,18 +998,19 @@ class CrowdSim(gym.Env):
                 np.array([self.robot.px, self.robot.py])
                 - np.array(self.robot.get_goal_position())
             )
-            reward = (
-                self.time_step
-                * self.config.reward.potential_factor
-                * (-abs(potential_cur) - self.potential)
-            )
-            self.potential = -abs(potential_cur)
+            if self.config.reward.potential_based:
+                reward = (
+                    self.time_step
+                    * self.config.reward.potential_factor
+                    * (-abs(potential_cur) - self.potential)
+                )
+                self.potential = -abs(potential_cur)
+            elif self.config.reward.exponential:
+                reward = self.time_step * 0.1 * (1 - (potential_cur / 2) ** 0.4)
 
-            # EXPONENTIAL TERM
-            # reward = self.time_step * 0.1 * (1 - (potential_cur / 2) ** 0.4)
-
-            # if norm_zone_violated:
-            #     reward += self.config.reward.norm_zone_penalty
+            if self.config.reward.norm_zones:
+                if norm_zone_violated:
+                    reward += self.config.reward.norm_zone_penalty
 
             done = False
             step_info["event"] = Nothing()

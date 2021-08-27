@@ -25,6 +25,10 @@ class Config(object):
 
     reward = BaseConfig()
     reward.normalize = False
+    reward.potential_based = True
+    reward.exponential = False
+    reward.norm_zones = False
+    assert reward.potential_based != reward.exponential
     reward.success_reward = 10 if not reward.normalize else 1
     reward.collision_penalty = -20 if not reward.normalize else -1
     reward.timeout_penalty = -20 if not reward.normalize else -1  # (UNUSED)
@@ -32,7 +36,7 @@ class Config(object):
     reward.discomfort_dist_front = 0.25
     # discomfort distance for the back half of the robot
     reward.discomfort_dist_back = 0.25
-    reward.discomfort_penalty_factor = 8 if not reward.normalize else 0.5
+    reward.discomfort_penalty_factor = 10 if not reward.normalize else 0.5
     reward.potential_factor = 2 if not reward.normalize else 0.1
     reward.gamma = 0.99  # discount factor for rewards
     # from SA-CADRL
