@@ -112,7 +112,6 @@ def evaluate(
 
         total_render_time = 0
         while not done:
-            step_counter += 1
             with torch.no_grad():
                 _, action, _, eval_recurrent_hidden_states = actor_critic.act(
                     obs,
@@ -129,7 +128,7 @@ def evaluate(
 
             # Obser reward and next obs
             obs, step_reward, done, step_info = eval_envs.step(action)
-
+            step_counter += 1
             episode_path += np.linalg.norm(
                 np.array(
                     [

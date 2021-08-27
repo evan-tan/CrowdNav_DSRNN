@@ -24,6 +24,7 @@ class Config(object):
     env.seed = 0  # env random seed
 
     reward = BaseConfig()
+    reward.time_factor = False
     reward.normalize = False
     reward.potential_based = True
     reward.exponential = False
