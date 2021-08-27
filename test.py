@@ -48,6 +48,7 @@ def main():
     test_parser.add_argument(
         "--num_threads", type=int, default=1, help="Number of threads to allocate"
     )
+    test_parser.add_argument("--diagnostics", action="store_true", help="Whether or not to plot cum. rewards and distance to goal versus time when studying specific cases or scenarios")
     test_args = test_parser.parse_args()
 
     model_dir_temp = test_args.model_dir
@@ -214,40 +215,47 @@ def main():
         recurrent_type=recurrent_cell,
     )
 
-    # plot cumulative reward vs time step
-    metrics = [raw_rewards, discounted_rewards, dist_to_goal]
-    COLORS = ("b", "g", "r", "c", "m", "y", "k", "w")
-    fig1, ax1 = plt.subplots()
-    fig2, ax2 = plt.subplots()
-    ax1.set_xlabel("Time step")
-    ax2.set_xlabel("Time step")
-    for i, metric in enumerate(metrics):
-        for key in metric:
-            # fetch from the correct bin
-            if len(metric[key]) > 0:
-                time_ = np.linspace(0, len(metric[key][0]), len(metric[key][0]))
+    if test_args.diagnostics:
+        # plot cumulative reward vs time step
+        metrics = [raw_rewards, discounted_rewards, dist_to_goal]
+        COLORS = ("b", "g", "r", "c", "m", "y", "k", "w")
+        fig1, ax1 = plt.subplots()
+        fig2, ax2 = plt.subplots()
+        ax1.set_xlabel("Time step")
+        ax2.set_xlabel("Time step")
+        for i, metric in enumerate(metrics):
+            for key in metric:
+                # fetch from the correct bin
+                if len(metric[key]) > 0:
+                    time_ = np.linspace(0, len(metric[key][0]), len(metric[key][0]))
 
-                if i == 0:
-                    y_label = "Cumulative Reward (Raw)"
-                    f_name = "cr_raw"
-                elif i == 1:
-                    y_label = "Cumulative Reward (Discounted)"
-                    f_name = "cr_disc"
-                elif i == 2:
-                    y_label = "Dist To Goal"
-                    f_name = "d2g"
-                y_data = metric[key] if i == 2 else np.cumsum(metric[key])
-                if i == 2:
-                    ax2.set_title("Distance To Goal VS Time")
-                    ax2.scatter(time_, y_data, color=COLORS[i], s=1, label=y_label)
-                else:
-                    ax1.set_title("Cumulative Rewards VS Time")
-                    ax1.scatter(time_, y_data, color=COLORS[i], s=1, label=y_label)
+                    if i == 0:
+                        y_label = "Cumulative Reward (Raw)"
+                        f_name = "cr_raw"
+                    elif i == 1:
+                        y_label = "Cumulative Reward (Discounted)"
+                        f_name = "cr_disc"
+                    elif i == 2:
+                        y_label = "Dist To Goal"
+                        f_name = "d2g"
+                    y_data = metric[key] if i == 2 else np.cumsum(metric[key])
+                    if i == 2:
+                        ax2.set_title("Distance To Goal VS Time")
+                        ax2.scatter(time_, y_data, color=COLORS[i], s=1, label=y_label)
+                    else:
+                        ax1.set_title("Cumulative Rewards VS Time")
+                        ax1.scatter(time_, y_data, color=COLORS[i], s=1, label=y_label)
 
-    ax1.legend(loc="lower right")
-    ax2.legend(loc="lower left")
-    fig1.savefig(f"{str(log_dir)}/rewards_vs_time_{key}_case_{test_args.test_case}", dpi=1200)
-    fig2.savefig(f"{str(log_dir)}/d2g_vs_time_{key}_case_{test_args.test_case}", dpi=1200)
+        ax1.legend(loc="lower right")
+        ax2.legend(loc="lower left")
+
+        plot_dir = log_dir / "plots"
+        if not plot_dir.exists():
+            plot_dir.mkdir()
+
+        fig1.savefig(f"{str(plot_dir)}/rewards_vs_time_{key}_case_{test_args.test_case}", dpi=1200)
+        fig2.savefig(f"{str(plot_dir)}/d2g_vs_time_{key}_case_{test_args.test_case}", dpi=1200)
+        print(f"Saved plots to {str(plot_dir)}")
 
 
 if __name__ == "__main__":
