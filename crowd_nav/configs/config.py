@@ -37,7 +37,10 @@ class Config(object):
     # discomfort distance for the back half of the robot
     reward.discomfort_dist_back = 0.25
     reward.discomfort_penalty_factor = 10 if not reward.normalize else 0.5
+    reward.discomfort_penalty_factor *= env.time_step
+
     reward.potential_factor = 2 if not reward.normalize else 0.1
+    reward.exp_factor = 0.5 if not reward.normalize else 0.025
     reward.gamma = 0.99  # discount factor for rewards
     # from SA-CADRL
     reward.norm_zone_penalty = -0.05

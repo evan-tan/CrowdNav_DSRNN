@@ -984,11 +984,7 @@ class CrowdSim(gym.Env):
             # only penalize agent for getting too close if it's visible
             # adjust the reward based on FPS
             # print(dmin)
-            reward = (
-                (dmin - self.discomfort_dist)
-                * self.discomfort_penalty_factor
-                * self.time_step
-            )
+            reward = (dmin - self.discomfort_dist) * self.discomfort_penalty_factor
             done = False
             step_info["event"] = Danger(dmin)
 
@@ -999,14 +995,12 @@ class CrowdSim(gym.Env):
                 - np.array(self.robot.get_goal_position())
             )
             if self.config.reward.potential_based:
-                reward = (
-                    self.time_step
-                    * self.config.reward.potential_factor
-                    * (-abs(potential_cur) - self.potential)
+                reward = self.config.reward.potential_factor * (
+                    -abs(potential_cur) - self.potential
                 )
                 self.potential = -abs(potential_cur)
             elif self.config.reward.exponential:
-                reward = self.time_step * 0.1 * (1 - (potential_cur / 2) ** 0.4)
+                reward = self.config.reward.exp_factor(1 - (potential_cur / 2) ** 0.4)
 
             if self.config.reward.norm_zones:
                 if norm_zone_violated:
