@@ -14,13 +14,14 @@ from numpy.linalg import norm
 
 from crowd_sim.envs.utils.helper import (
     NormZoneRectangle,
+    Rectangle,
     VelocityRectangle,
     make_shapely_ellipse,
     vec_norm,
     wrap_angle,
 )
 from crowd_sim.envs.utils.human import Human
-from crowd_sim.envs.utils.info import *
+from crowd_sim.envs.utils.info import Collision, Danger, Nothing, ReachGoal, Timeout
 from crowd_sim.envs.utils.robot import Robot
 from crowd_sim.envs.utils.state import *
 
@@ -947,6 +948,16 @@ class CrowdSim(gym.Env):
         self.last_acceleration = (ax, ay)
 
         step_info["jerk_cost"] = jerk_cost
+        step_info["dist_to_goal"] = vec_norm(
+            self.robot.get_position(), self.robot.get_goal_position()
+        )
+
+        world_size = self.config.sim.square_width
+        world_box = Rectangle(world_size, world_size)
+        robot_ellipse = make_shapely_ellipse(
+            self.robot.radius, self.robot.get_goal_position()
+        )
+        inside_world = True if robot_ellipse.intersects(world_box._rect) else False
 
         # SOCIAL METRIC 5
         speed = (action.vx ** 2 + action.vy ** 2) ** 0.5
@@ -959,7 +970,8 @@ class CrowdSim(gym.Env):
             reward = 0
             done = True
             step_info["event"] = Timeout()
-        elif collision:
+        # additional check to end episode if robot veers off too far
+        elif collision or not inside_world:
             reward = self.collision_penalty
             done = True
             step_info["event"] = Collision()
@@ -986,12 +998,15 @@ class CrowdSim(gym.Env):
                 np.array([self.robot.px, self.robot.py])
                 - np.array(self.robot.get_goal_position())
             )
-            reward = self.config.reward.potential_factor * (
-                -abs(potential_cur) - self.potential
+            reward = (
+                self.time_step
+                * self.config.reward.potential_factor
+                * (-abs(potential_cur) - self.potential)
             )
             self.potential = -abs(potential_cur)
 
-            # reward = 1 - (potential_cur / self.config.sim.square_width) ** 0.4
+            # EXPONENTIAL TERM
+            # reward = self.time_step * 0.1 * (1 - (potential_cur / 2) ** 0.4)
 
             # if norm_zone_violated:
             #     reward += self.config.reward.norm_zone_penalty

@@ -128,7 +128,7 @@ def main():
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     if test_args.test_case != -1:
-        config.env.test_size = 5
+        config.env.test_size = 1
     test_cases_str = "all" if test_args.test_case == -1 else str(test_args.test_case)
     logging.info("Test Cases: " + test_cases_str)
     logging.info("robot FOV %f", config.robot.FOV * np.pi)
@@ -248,7 +248,6 @@ def main():
     ax2.legend(loc="lower left")
     fig1.savefig(f"{str(log_dir)}/rewards_vs_time_{key}_case_{test_args.test_case}", dpi=1200)
     fig2.savefig(f"{str(log_dir)}/d2g_vs_time_{key}_case_{test_args.test_case}", dpi=1200)
-    plt.show()
 
 
 if __name__ == "__main__":

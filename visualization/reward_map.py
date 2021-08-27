@@ -19,6 +19,8 @@ def main():
     z1 = np.linspace(0, x2, n_pts)
     z2 = slope * z1 + y1
     z3 = 1 - (z1 / x2) ** 0.4
+    z5 = 1 - (z1 / 2) ** 0.4
+
 
     random_radius = 0.5
     n_cols = len(z1[z1 >= random_radius])
@@ -29,7 +31,8 @@ def main():
     # DSRNN current
     ax.plot(z1, z2, label="Potential-Based Reward")
     # DSRNN proposed
-    ax.plot(z1, z3, label="Shaped Reward")
+    ax.plot(z1, z3, label=r"Shaped Reward, $\alpha$ = 20")
+    ax.plot(z1, z5, label=r"Shaped Reward, $\alpha$ = 2")
     # other algos
     ax.plot(z1, z4, label="Sparse Reward")
 
