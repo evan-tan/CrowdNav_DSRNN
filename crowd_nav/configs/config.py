@@ -42,6 +42,7 @@ class Config(object):
 
     reward.potential_factor = 2 if not reward.normalize else 0.1
     reward.exp_factor = 0.5 if not reward.normalize else 0.025
+    reward.exp_denom = 6  # set to same as sim.circle_radius
     reward.gamma = 0.99  # discount factor for rewards
     # from SA-CADRL
     reward.norm_zone_penalty = -0.05

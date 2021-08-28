@@ -966,7 +966,6 @@ class CrowdSim(gym.Env):
         else:
             step_info["speed_violation"] = 0
 
-
         time_discount_factor = (self.time_limit - self.global_time) / self.time_limit
         if self.global_time >= self.time_limit - 1:
             reward = 0
@@ -1005,7 +1004,9 @@ class CrowdSim(gym.Env):
                 )
                 self.potential = -abs(potential_cur)
             elif self.config.reward.exponential:
-                reward = self.config.reward.exp_factor(1 - (potential_cur / 2) ** 0.4)
+                reward = self.config.reward.exp_factor * (
+                    1 - (potential_cur / self.config.reward.exp_denom) ** 0.4
+                )
 
             if self.config.reward.time_factor:
                 reward *= time_discount_factor

@@ -16,6 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from crowd_nav.configs.config import Config
 from crowd_sim import *
+from crowd_sim.envs.utils.info import Collision, Danger, Nothing, ReachGoal, Timeout
 from pytorchBaselines.a2c_ppo_acktr import algo, utils
 from pytorchBaselines.a2c_ppo_acktr.envs import make_vec_envs
 from pytorchBaselines.a2c_ppo_acktr.model import Policy
@@ -100,12 +101,13 @@ def main():
     if config.sim.render:
         fig, ax = plt.subplots(figsize=(7, 7))
         val = config.sim.square_width
-        ax.set_xlim(-val, val)
-        ax.set_ylim(-val, val)
+        ax.set_xlim(-val / 2, val / 2)
+        ax.set_ylim(-val / 2, val / 2)
         ax.set_xlabel("x(m)", fontsize=16)
         ax.set_ylabel("y(m)", fontsize=16)
-        plt.ion()
-        plt.show()
+        # plt.ion()
+        plt.show(block=False)
+        plt.pause(0.1)
     else:
         ax = None
 
@@ -114,6 +116,7 @@ def main():
         config.ppo.num_mini_batch = 1
 
     # create a manager env
+    render_fig = fig if config.sim.render else None
     envs = make_vec_envs(
         env_name,
         config.env.seed,
@@ -124,6 +127,7 @@ def main():
         False,
         config=config,
         ax=ax,
+        fig=render_fig,
     )
 
     actor_critic = Policy(
@@ -183,6 +187,7 @@ def main():
     tboard_logdir = tboard_logdir.replace("//", "/")
     writer = SummaryWriter(log_dir=tboard_logdir)
     start_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    num_events = {"success": 0, "collision": 0, "timeout": 0}
     for j in range(num_updates):
 
         if config.training.use_linear_lr_decay:
@@ -216,12 +221,17 @@ def main():
                 envs.render()
             # Obser reward and next obs
             obs, reward, done, infos = envs.step(action)
-            # print(done)
 
+            # loop through infos since we are using vectorized environments
             for info in infos:
-                # print(info.keys())
                 if "episode" in info.keys():
                     episode_rewards.append(info["episode"]["r"])
+                if isinstance(info.get("info").get("event"), ReachGoal):
+                    num_events["success"] += 1
+                elif isinstance(info.get("info").get("event"), Collision):
+                    num_events["collision"] += 1
+                elif isinstance(info.get("info").get("event"), Timeout):
+                    num_events["timeout"] += 1
 
             # If done then clean the history of observations.
             masks = torch.FloatTensor([[0.0] if done_ else [1.0] for done_ in done])
@@ -285,7 +295,7 @@ def main():
             end = time.time()
             print(
                 "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward "
-                "{:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".format(
+                "{:.3f}/{:.3f}, min/max reward {:.3f}/{:.3f}\n".format(
                     j,
                     total_num_steps,
                     int(total_num_steps / (end - start)),
@@ -342,6 +352,11 @@ def main():
                     header=True,
                     index=False,
                 )
+
+    logging.info(f"Successful iterations: {num_events['success']}")
+    logging.info(f"Collision iterations: {num_events['collision']}")
+    logging.info(f"Timeout iterations: {num_events['timeout']}")
+
     end_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     logging.info("START @ " + start_time)
     logging.info("END @ " + end_time)
