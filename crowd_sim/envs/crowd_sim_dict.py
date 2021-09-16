@@ -88,8 +88,8 @@ class CrowdSimDict(CrowdSim):
         :return:
         """
         # select scenario from all available choices with equal probability
-        scenario_weights = [1 / len(self.scenarios)] * len(self.scenbarios)
-        self.current_scenario = random.choices(self.scenarios, scenario_weights)
+        scenario_weights = [1 / len(self.scenarios)] * len(self.scenarios)
+        self.current_scenario = random.choices(self.scenarios, scenario_weights)[0]
 
         if self.phase is not None:
             phase = self.phase
