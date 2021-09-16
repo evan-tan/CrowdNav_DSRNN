@@ -49,8 +49,13 @@ class Config(object):
 
     sim = BaseConfig()
     sim.render = False  # show GUI for visualization
-    sim.train_val_sim = "circle_crossing"
-    sim.test_sim = "circle_crossing"
+    sim.train_val_sim = [
+        "circle_crossing",
+        "square_crossing",
+        "parallel_traffic",
+        "perpendicular_traffic",
+    ]
+    sim.test_sim = "circle_crossing"  # (UNUSED)
     sim.square_width = 20
     sim.circle_radius = 6 if not test.side_preference and not test.social_metrics else 4
     sim.human_num = 5 if not test.side_preference else 1

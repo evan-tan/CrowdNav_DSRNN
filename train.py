@@ -16,6 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from crowd_nav.configs.config import Config
 from crowd_sim import *
+from crowd_sim.envs.utils.helper import create_events_dict, log_events_dict
 from crowd_sim.envs.utils.info import Collision, Danger, Nothing, ReachGoal, Timeout
 from pytorchBaselines.a2c_ppo_acktr import algo, utils
 from pytorchBaselines.a2c_ppo_acktr.envs import make_vec_envs
@@ -187,7 +188,9 @@ def main():
     tboard_logdir = tboard_logdir.replace("//", "/")
     writer = SummaryWriter(log_dir=tboard_logdir)
     start_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    num_events = {"success": 0, "collision": 0, "timeout": 0}
+
+    num_events = create_events_dict(config)
+
     for j in range(num_updates):
 
         if config.training.use_linear_lr_decay:
@@ -224,14 +227,18 @@ def main():
 
             # loop through infos since we are using vectorized environments
             for info in infos:
+                curr_scenario = info.get("info").get("scenario")
                 if "episode" in info.keys():
                     episode_rewards.append(info["episode"]["r"])
                 if isinstance(info.get("info").get("event"), ReachGoal):
-                    num_events["success"] += 1
+                    num_events["success"]["total"] += 1
+                    num_events["success"][curr_scenario] += 1
                 elif isinstance(info.get("info").get("event"), Collision):
-                    num_events["collision"] += 1
+                    num_events["collision"]["total"] += 1
+                    num_events["collision"][curr_scenario] += 1
                 elif isinstance(info.get("info").get("event"), Timeout):
-                    num_events["timeout"] += 1
+                    num_events["timeout"]["total"] += 1
+                    num_events["timeout"][curr_scenario] += 1
 
             # If done then clean the history of observations.
             masks = torch.FloatTensor([[0.0] if done_ else [1.0] for done_ in done])
@@ -353,9 +360,9 @@ def main():
                     index=False,
                 )
 
-    logging.info(f"Successful iterations: {num_events['success']}")
-    logging.info(f"Collision iterations: {num_events['collision']}")
-    logging.info(f"Timeout iterations: {num_events['timeout']}")
+    logging.info("")
+    logging.info("SCENARIO BREAKDOWN: ")
+    log_events_dict(num_events, logging)
 
     end_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     logging.info("START @ " + start_time)

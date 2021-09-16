@@ -17,11 +17,13 @@ from crowd_sim.envs.utils.helper import (
     Rectangle,
     VelocityRectangle,
     make_shapely_ellipse,
+    rand_world_pt,
     vec_norm,
     wrap_angle,
 )
 from crowd_sim.envs.utils.human import Human
 from crowd_sim.envs.utils.info import Collision, Danger, Nothing, ReachGoal, Timeout
+from crowd_sim.envs.utils.lidar import LidarSensor
 from crowd_sim.envs.utils.robot import Robot
 from crowd_sim.envs.utils.state import *
 
@@ -120,6 +122,18 @@ class CrowdSim(gym.Env):
         else:
             raise NotImplementedError
         self.case_counter = {"train": 0, "test": 0, "val": 0}
+
+        self.scenario_counter = {}
+        # just to catch if you didn't update the train_config.py
+        data_type = type(config.sim.train_val_sim)
+        if data_type is list:
+            self.scenarios = config.sim.train_val_sim
+        elif data_type is str:
+            raise TypeError(
+                "config.sim.train_val_sim should be a list of strings. Update your config.py"
+            )
+
+        self.current_scenario = None
 
         logging.info("human number: {}".format(self.human_num))
         if self.randomize_attributes:
@@ -251,24 +265,59 @@ class CrowdSim(gym.Env):
         human.set(px, py, px, py, 0, 0, 0, v_pref=0)
         return human
 
+    def create_start_end_pts(self, scenario, agent):
+        v_pref = 1.0 if agent.v_pref == 0 else agent.v_pref
+        # add some noise to simulate all the possible cases robot could meet with human
+        px_noise = (np.random.random() - 0.5) * v_pref
+        py_noise = (np.random.random() - 0.5) * v_pref
+
+        if "circle_crossing" in scenario:
+            angle = np.random.random() * np.pi * 2
+            px = self.circle_radius * np.cos(angle) + px_noise
+            py = self.circle_radius * np.sin(angle) + py_noise
+            gx = -px
+            gy = -py
+        elif "square_crossing" in scenario:
+            # rand_world_pt generates random point in (-10,10)
+            # based on config.sim.square_width
+            px = rand_world_pt(self.config) * 0.4 + px_noise
+            py = rand_world_pt(self.config) * 0.4 + py_noise
+            gx = rand_world_pt(self.config) * 0.4 + px_noise
+            gy = rand_world_pt(self.config) * 0.4 + py_noise
+        elif "parallel_traffic" in scenario:
+            # whether or not to flip sides
+            sign = 1 if np.random.random() >= 0.5 else -1
+            px = rand_world_pt(self.config) * 0.4 + px_noise
+            # (1,4) or (-1,-4)
+            py = sign * (np.random.random() * 3 + 1 + py_noise)
+            gx = px
+            gy = -py
+        elif "perpendicular_traffic" in scenario:
+            sign = 1 if np.random.random() >= 0.5 else -1
+            # (1,4) or (-1,-4)
+            px = sign * (np.random.random() * 3 + 1 + px_noise)
+            gx = -px
+            py = rand_world_pt(self.config) * 0.4 + py_noise
+            gy = py
+
+        # generate spawn and goal positions
+        return px, py, gx, gy
+
     def generate_circle_crossing_human(self):
         human = Human(self.config, "humans")
         if self.randomize_attributes:
             human.sample_random_attributes()
 
         while True:
-            angle = np.random.random() * np.pi * 2
-            # add some noise to simulate all the possible cases robot could meet with human
-            v_pref = 1.0 if human.v_pref == 0 else human.v_pref
-            px_noise = (np.random.random() - 0.5) * v_pref
-            py_noise = (np.random.random() - 0.5) * v_pref
-            px = self.circle_radius * np.cos(angle) + px_noise
-            py = self.circle_radius * np.sin(angle) + py_noise
-            collide = False
+            # create spawn/goal based on scenario
+            px, py, gx, gy = self.create_start_end_pts(self.current_scenario, human)
 
+            collide = False
+            # for Group environment
             if self.group_human:
                 collide = self.check_collision_group((px, py), human.radius)
 
+            # for FoV environment
             else:
                 for i, agent in enumerate([self.robot] + self.humans):
                     # keep human at least 3 meters away from robot
@@ -287,10 +336,7 @@ class CrowdSim(gym.Env):
             if not collide:
                 break
 
-        # px = np.random.uniform(-6, 6)
-        # py = np.random.uniform(-3, 3.5)
-        # human.set(px, py, px, py, 0, 0, 0)
-        human.set(px, py, -px, -py, 0, 0, 0)
+        human.set(px, py, gx, gy, 0, 0, 0)
         return human
 
     # add noise according to env.config to state
@@ -560,6 +606,7 @@ class CrowdSim(gym.Env):
                             px, py, gx, gy = np.random.uniform(
                                 -self.circle_radius, self.circle_radius, 4
                             )
+                            # ensure minimum distance of 6m
                             if np.linalg.norm([px - gx, py - gy]) >= 6:
                                 break
                         self.robot.set(px, py, gx, gy, 0, 0, np.pi / 2)
@@ -714,7 +761,7 @@ class CrowdSim(gym.Env):
                 human.gy = gy
         return
 
-    # Update the specified human's end goals in the environment randomly
+    # Update the specified human's end goals in the environment based on scenario
     def update_human_goal(self, human):
 
         # Update human's goals randomly
@@ -734,13 +781,7 @@ class CrowdSim(gym.Env):
                 human.v_pref += np.random.uniform(-0.1, 0.1)
 
             while True:
-                angle = np.random.random() * np.pi * 2
-                # add some noise to simulate all the possible cases robot could meet with human
-                v_pref = 1.0 if human.v_pref == 0 else human.v_pref
-                gx_noise = (np.random.random() - 0.5) * v_pref
-                gy_noise = (np.random.random() - 0.5) * v_pref
-                gx = self.circle_radius * np.cos(angle) + gx_noise
-                gy = self.circle_radius * np.sin(angle) + gy_noise
+                _, _, gx, gy = self.create_start_end_pts(self.current_scenario, human)
                 collide = False
                 if self.group_human:
                     collide = self.check_collision_group((gx, gy), human.radius)
@@ -967,6 +1008,8 @@ class CrowdSim(gym.Env):
             step_info["speed_violation"] = 0
 
         time_discount_factor = (self.time_limit - self.global_time) / self.time_limit
+        step_info["scenario"] = self.current_scenario
+
         if self.global_time >= self.time_limit - 1:
             reward = 0
             done = True

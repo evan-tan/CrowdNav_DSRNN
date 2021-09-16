@@ -1,8 +1,38 @@
 from typing import List
 
+import matplotlib.lines as mlines
 import numpy as np
 import shapely.geometry
 from crowd_sim.envs.utils.agent import Agent
+
+
+def create_events_dict(config):
+    # store a dict of dicts to ...
+    # breakdown cases according to scenarios
+    num_events = {
+        "success": {},
+        "collision": {},
+        "timeout": {},
+    }
+    for k in num_events.keys():
+        num_events[k]["total"] = 0
+        for scenario in config.sim.train_val_sim:
+            num_events[k][scenario] = 0
+    return num_events
+
+
+def log_events_dict(events_dict, logger):
+    for k in events_dict.keys():
+        logger.info("")
+        logger.info(f"{k.upper()} CASES: ")
+        for scenario, count in events_dict[k].items():
+            logger.info(f"{scenario}: {count}")
+
+
+def rand_world_pt(config):
+    # generate random world point based on square_width
+    # this assumes world is centered at (0,0)
+    return (np.random.random() - 0.5) * config.sim.square_width / 2
 
 
 # wrap angle between [-180, 180]
@@ -18,7 +48,14 @@ def vec_norm(A, B):
     return np.linalg.norm([A[0] - B[0], A[1] - B[1]])
 
 
+def make_mpl_line(x, y):
+    return mlines.Line2D(
+        x, y, marker="o", markersize=2, color="r", solid_capstyle="round"
+    )
+
+
 # smoothing function for visualizing noisy training data
+# https://stackoverflow.com/questions/42281844/what-is-the-mathematics-behind-the-smoothing-parameter-in-tensorboards-scalar
 def smooth_data(scalars: List[float], weight: float) -> List[float]:
     assert weight >= 0 and weight <= 1
     last = scalars[0]  # First value in the plot (first timestep)
@@ -31,11 +68,19 @@ def smooth_data(scalars: List[float], weight: float) -> List[float]:
     return smoothed
 
 
+def make_shapely_polygon(pts):
+    # ensure wrap around
+    if pts[0] != pts[-1]:
+        pts.append(pts[0])
+    return shapely.geometry.Polygon(pts)
+
+
 def make_shapely_ellipse(radius, position, downsample=True):
     ellipse = shapely.geometry.Point(position[0], position[1]).buffer(radius)
     if downsample:
         ellipse = ellipse.simplify(0.1)
     return ellipse
+
 
 # https://shapely.readthedocs.io/en/stable/manual.html#shapely.geometry.box
 class Rectangle:

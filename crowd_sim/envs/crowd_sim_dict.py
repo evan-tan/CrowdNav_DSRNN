@@ -1,9 +1,11 @@
+import random
+
 import gym
 import numpy as np
 from numpy.linalg import norm
-import copy
-from crowd_sim.envs.utils.action import ActionRot, ActionXY
+
 from crowd_sim.envs import CrowdSim
+from crowd_sim.envs.utils.action import ActionRot, ActionXY
 
 
 class CrowdSimDict(CrowdSim):
@@ -85,6 +87,9 @@ class CrowdSimDict(CrowdSim):
         Set px, py, gx, gy, vx, vy, theta for robot and humans
         :return:
         """
+        # select scenario from all available choices with equal probability
+        scenario_weights = [1 / len(self.scenarios)] * len(self.scenbarios)
+        self.current_scenario = random.choices(self.scenarios, scenario_weights)
 
         if self.phase is not None:
             phase = self.phase
