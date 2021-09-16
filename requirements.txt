@@ -1,6 +1,15 @@
 numpy
 pandas
-pytorch>=1.5.0,<=1.7.1
+matplotlib
 torchvision
 gym
 tensorflow
+tensorboard
+scipy
+scikit-image
+shapely
+
+--find-links https://download.pytorch.org/whl/torch_stable.html
+torch==1.7.1+cu110
+torchvision==0.8.2+cu110
+torchaudio==0.7.2
