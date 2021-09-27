@@ -3,6 +3,7 @@ from copy import deepcopy
 
 import numpy as np
 import torch
+from crowd_sim.envs.utils.helper import create_events_dict, log_events_dict
 from crowd_sim.envs.utils.info import Collision, Danger, Nothing, ReachGoal, Timeout
 from matplotlib import pyplot as plt
 
@@ -86,6 +87,8 @@ def evaluate(
         side_counter = {"left": 0, "right": 0}
         scenario = config.test.side_preference_scenario
 
+    num_events = create_events_dict(config)
+
     obs = eval_envs.reset()
     test_size = config.env.test_size if not config.test.side_preference else 200
     for k in range(test_size):
@@ -127,7 +130,7 @@ def evaluate(
                 total_render_time += time.time() - start
 
             # Obser reward and next obs
-            obs, step_reward, done, step_info = eval_envs.step(action)
+            obs, step_reward, done, infos = eval_envs.step(action)
             step_counter += 1
             episode_path += np.linalg.norm(
                 np.array(
@@ -148,41 +151,42 @@ def evaluate(
             last_pos = obs["robot_node"][0, 0, 0:2].cpu().numpy()  # robot px, py
             last_angle = cur_angle
 
-            if isinstance(step_info[0]["info"], Danger):
-                min_dist.append(step_info[0]["info"].min_dist)
+            for info in infos:
+                if isinstance(info["info"], Danger):
+                    min_dist.append(info["info"].min_dist)
 
-            eval_masks = torch.tensor(
-                [[0.0] if done_ else [1.0] for done_ in done],
-                dtype=torch.float32,
-                device=device,
-            )
-            episode_rewards.append(step_reward.item())
-
-            if config.test.side_preference:
-                if step_info[0].get("info").get(scenario) is not None:
-                    curr_scenario = step_info[0].get("info").get(scenario)
-                    if curr_scenario.get("left") == 1:
-                        side_counter["left"] += 1
-                    elif curr_scenario.get("right") == 1:
-                        side_counter["right"] += 1
-
-            if step_info[0].get("info").get("personal_violation") == 1:
-                personal_violation_time += base_env.time_step
-            if step_info[0].get("info").get("path_violation"):
-                path_violation_time += base_env.time_step * step_info[0].get(
-                    "info"
-                ).get("path_violation")
-            if step_info[0].get("info").get("aggregate_nav_time"):
-                aggregate_nav_time += base_env.time_step * step_info[0].get("info").get(
-                    "aggregate_nav_time"
+                eval_masks = torch.tensor(
+                    [[0.0] if done_ else [1.0] for done_ in done],
+                    dtype=torch.float32,
+                    device=device,
                 )
-            if step_info[0].get("info").get("jerk_cost"):
-                jerk_cost += step_info[0]["info"].get("jerk_cost")
-            if step_info[0].get("info").get("speed_violation") == 1:
-                speed_violation_time += base_env.time_step
+                episode_rewards.append(step_reward.item())
 
-            if step_info[0].get("info").get("dist_to_goal"):
-                episode_d2g.append(step_info[0].get("info").get("dist_to_goal"))
+                if config.test.side_preference:
+                    if info.get("info").get(scenario) is not None:
+                        curr_scenario = info.get("info").get(scenario)
+                        if curr_scenario.get("left") == 1:
+                            side_counter["left"] += 1
+                        elif curr_scenario.get("right") == 1:
+                            side_counter["right"] += 1
+
+                if info.get("info").get("personal_violation") == 1:
+                    personal_violation_time += base_env.time_step
+                if info.get("info").get("path_violation"):
+                    path_violation_time += base_env.time_step * info.get("info").get(
+                        "path_violation"
+                    )
+                if info.get("info").get("aggregate_nav_time"):
+                    aggregate_nav_time += base_env.time_step * info.get("info").get(
+                        "aggregate_nav_time"
+                    )
+                if info.get("info").get("jerk_cost"):
+                    jerk_cost += info["info"].get("jerk_cost")
+                if info.get("info").get("speed_violation") == 1:
+                    speed_violation_time += base_env.time_step
+
+                if info.get("info").get("dist_to_goal"):
+                    episode_d2g.append(info.get("info").get("dist_to_goal"))
 
         # END OF SINGLE EPISODE
 
@@ -201,7 +205,11 @@ def evaluate(
             for t, reward in enumerate(episode_rewards)
         ]
 
-        if isinstance(step_info[0].get("info").get("event"), ReachGoal):
+        # only count scenarios when terminal states reached
+        if isinstance(info.get("info").get("event"), (ReachGoal, Collision, Timeout)):
+            curr_scenario = info.get("info").get("scenario")
+
+        if isinstance(info.get("info").get("event"), ReachGoal):
             success_times.append(global_time)
             success_cases.append(k)
 
@@ -223,20 +231,28 @@ def evaluate(
                 elif side_counter["left"] < side_counter["right"]:
                     side_preferences[scenario]["right"] += 1
 
+            num_events["success"]["total"] += 1
+            num_events["success"][curr_scenario] += 1
             print("Success")
-        elif isinstance(step_info[0].get("info").get("event"), Collision):
+        elif isinstance(info.get("info").get("event"), Collision):
             collision_cases.append(k)
             collision_times.append(global_time)
             discounted_rewards["collision"].append(tmp_disc_reward)
             raw_rewards["collision"].append(episode_rewards)
             dist_to_goal["collision"].append(episode_d2g)
+
+            num_events["collision"]["total"] += 1
+            num_events["collision"][curr_scenario] += 1
             print("Collision")
-        elif isinstance(step_info[0].get("info").get("event"), Timeout):
+        elif isinstance(info.get("info").get("event"), Timeout):
             timeout_cases.append(k)
             timeout_times.append(base_env.time_limit)
             discounted_rewards["timeout"].append(tmp_disc_reward)
             raw_rewards["timeout"].append(episode_rewards)
             dist_to_goal["timeout"].append(episode_d2g)
+
+            num_events["timeout"]["total"] += 1
+            num_events["timeout"][curr_scenario] += 1
             print("Time out")
         else:
             raise ValueError("Invalid end signal from environment")
@@ -273,6 +289,10 @@ def evaluate(
     logging.info("Success cases: " + " ".join([str(x) for x in success_cases]))
     logging.info("Collision cases: " + " ".join([str(x) for x in collision_cases]))
     logging.info("Timeout cases: " + " ".join([str(x) for x in timeout_cases]))
+
+    logging.info("")
+    logging.info("SCENARIO BREAKDOWN: ")
+    log_events_dict(num_events, logging)
 
     metrics.add_metric("navigation time", success_times)
     metrics.add_metric("path length", path_lengths)

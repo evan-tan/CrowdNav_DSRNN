@@ -125,13 +125,15 @@ class CrowdSim(gym.Env):
 
         self.scenario_counter = {}
         # just to catch if you didn't update the train_config.py
-        data_type = type(config.sim.train_val_sim)
-        if data_type is list:
-            self.scenarios = config.sim.train_val_sim
-        elif data_type is str:
-            raise TypeError(
-                "config.sim.train_val_sim should be a list of strings. Update your config.py"
-            )
+        self.scenarios = {
+            "train": config.sim.train_val_sim,
+            "test": config.sim.test_sim,
+        }
+        for _, val in self.scenarios.items():
+            if type(val) is str:
+                raise TypeError(
+                    "config.sim.train_val_sim or config.sim.test_sim should be a list of strings. Update your config.py"
+                )
 
         self.current_scenario = None
 

@@ -77,8 +77,13 @@ class CrowdSimDict(CrowdSim):
         # spatial edges: the vector pointing from the robot position to each human's position
         ob["spatial_edges"] = np.zeros((self.human_num, 2))
         for i in range(self.human_num):
-            relative_pos = np.array([self.last_human_states[i, 0] - self.robot.px, self.last_human_states[i, 1] - self.robot.py])
-            ob['spatial_edges'][i] = relative_pos
+            relative_pos = np.array(
+                [
+                    self.last_human_states[i, 0] - self.robot.px,
+                    self.last_human_states[i, 1] - self.robot.py,
+                ]
+            )
+            ob["spatial_edges"][i] = relative_pos
 
         return ob
 
@@ -87,9 +92,11 @@ class CrowdSimDict(CrowdSim):
         Set px, py, gx, gy, vx, vy, theta for robot and humans
         :return:
         """
-        # select scenario from all available choices with equal probability
-        scenario_weights = [1 / len(self.scenarios)] * len(self.scenarios)
-        self.current_scenario = random.choices(self.scenarios, scenario_weights)[0]
+        # select set of scenarios based on phase
+        # select scenario from set, with equal probability
+        set_scenarios = self.scenarios[self.phase]
+        scenario_weights = [1 / len(set_scenarios)] * len(set_scenarios)
+        self.current_scenario = random.choices(set_scenarios, scenario_weights)[0]
 
         if self.phase is not None:
             phase = self.phase

@@ -49,13 +49,21 @@ class Config(object):
 
     sim = BaseConfig()
     sim.render = False  # show GUI for visualization
+    # currently selected at random
+    # select which scenarios you would like to train
     sim.train_val_sim = [
         "circle_crossing",
         "square_crossing",
         "parallel_traffic",
         "perpendicular_traffic",
     ]
-    sim.test_sim = "circle_crossing"  # (UNUSED)
+    # select which scenarios you would like to test
+    sim.test_sim = [
+        "circle_crossing",
+        "square_crossing",
+        "parallel_traffic",
+        "perpendicular_traffic",
+    ]
     sim.square_width = 20
     sim.circle_radius = 6 if not test.side_preference and not test.social_metrics else 4
     sim.human_num = 5 if not test.side_preference else 1
