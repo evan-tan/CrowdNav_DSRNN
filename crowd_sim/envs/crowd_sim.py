@@ -217,6 +217,10 @@ class CrowdSim(gym.Env):
             # this allows ax.draw_artist to work later
             self.render_axis.draw_artist(dummy_art)
             self.render_figure.canvas.blit(self.render_figure.bbox)
+
+        world_size = self.config.sim.square_width
+        self.world_box = Rectangle(world_size, world_size)
+        self.lidar = LidarSensor(config.lidar.cfg)
         return
 
     def set_robot(self, robot):
@@ -267,11 +271,12 @@ class CrowdSim(gym.Env):
         human.set(px, py, px, py, 0, 0, 0, v_pref=0)
         return human
 
-    def create_start_end_pts(self, scenario, agent):
+    def create_agent_attributes(self, scenario, agent):
         v_pref = 1.0 if agent.v_pref == 0 else agent.v_pref
         # add some noise to simulate all the possible cases robot could meet with human
         px_noise = (np.random.random() - 0.5) * v_pref
         py_noise = (np.random.random() - 0.5) * v_pref
+        heading = 0
 
         if "circle_crossing" in scenario:
             angle = np.random.random() * np.pi * 2
@@ -301,18 +306,39 @@ class CrowdSim(gym.Env):
             gx = -px
             py = rand_world_pt(self.config) * 0.4 + py_noise
             gy = py
+        elif "side_pref_passing" or "side_pref_overtaking" in scenario:
+            min_x = -(self.robot.radius + agent.radius)
+            max_x = -min_x
+            human_x = (max_x - min_x) * np.random.random() + min_x
+            px = human_x
+            gx = px
+            py = self.circle_radius
+            gy = -py
+            if "side_pref_passing" in scenario:
+                heading = -np.pi / 2
+            if "side_pref_overtaking" in scenario:
+                offset = 2
+                py += offset
+                gy += offset
+                heading = np.pi / 2
+                v_pref = 0.3
+        elif "side_pref_crossing" in scenario:
+            min_x = -(self.circle_radius + self.robot.radius + agent.radius)
+            max_x = -(self.circle_radius - self.robot.radius - agent.radius)
+            human_x = (max_x - min_x) * np.random.random() + min_x
 
         # generate spawn and goal positions
-        return px, py, gx, gy
+        return px, py, gx, gy, heading, v_pref
 
     def generate_circle_crossing_human(self):
         human = Human(self.config, "humans")
         if self.randomize_attributes:
             human.sample_random_attributes()
-
         while True:
             # create spawn/goal based on scenario
-            px, py, gx, gy = self.create_start_end_pts(self.current_scenario, human)
+            px, py, gx, gy, heading, vel = self.create_agent_attributes(
+                self.current_scenario, human
+            )
 
             collide = False
             # for Group environment
@@ -329,16 +355,13 @@ class CrowdSim(gym.Env):
                         )  # Todo: if circle_radius <= 4, it will get stuck here
                     else:
                         min_dist = human.radius + agent.radius + self.discomfort_dist
-                    if (
-                        norm((px - agent.px, py - agent.py)) < min_dist
-                        or norm((px - agent.gx, py - agent.gy)) < min_dist
-                    ):
+                    if vec_norm([px, py], [agent.px, agent.py]) < min_dist:
                         collide = True
                         break
             if not collide:
                 break
 
-        human.set(px, py, gx, gy, 0, 0, 0)
+        human.set(px, py, gx, gy, 0, 0, heading, v_pref=vel)
         return human
 
     # add noise according to env.config to state
@@ -502,163 +525,114 @@ class CrowdSim(gym.Env):
     # for crowd nav: human_num == self.human_num
     # for leader follower: human_num = self.human_num - 1
     def generate_robot_humans(self, phase, human_num=None):
-        if not self.config.test.side_preference:
-            if human_num is None:
-                human_num = self.human_num
-            # for Group environment
-            if self.group_human:
-                # set the robot in a dummy far away location to avoid collision with humans
-                if self.config.test.social_metrics:
-                    self.robot.set(
-                        0, -self.circle_radius, 0, self.circle_radius, 0, 0, np.pi / 2
-                    )
-                else:
-                    self.robot.set(10, 10, 10, 10, 0, 0, np.pi / 2)
-
-                # generate humans
-                self.circle_groups = []
-                humans_left = human_num
-
-                while humans_left > 0:
-                    # print("****************\nhumans left: ", humans_left)
-                    if humans_left <= 4:
-                        if phase in ["train", "val"]:
-                            self.generate_random_human_position(human_num=humans_left)
-                        else:
-                            self.generate_random_human_position(human_num=humans_left)
-                        humans_left = 0
-                    else:
-                        if humans_left < 10:
-                            max_rand = humans_left
-                        else:
-                            max_rand = 10
-                        # print("randint from 4 to ", max_rand)
-                        circum_num = np.random.randint(4, max_rand)
-                        # print("circum num: ", circum_num)
-                        self.generate_circle_group_obstacle(circum_num)
-                        humans_left -= circum_num
-
-                # randomize starting position and goal position while keeping the distance of goal to be > 6
-                # set the robot on a circle with radius 5.5 randomly
-                rand_angle = np.random.uniform(0, np.pi * 2)
-                # print('rand angle:', rand_angle)
-                increment_angle = 0.0
-                while True:
-                    px_r = np.cos(rand_angle + increment_angle) * 5.5
-                    py_r = np.sin(rand_angle + increment_angle) * 5.5
-                    # check whether the initial px and py collides with any human
-                    collision = self.check_collision_group(
-                        (px_r, py_r), self.robot.radius
-                    )
-                    # if the robot goal does not fall into any human groups, the goal is okay, otherwise keep generating the goal
-                    if not collision:
-                        # print('initial pos angle:', rand_angle+increment_angle)
-                        break
-                    increment_angle = increment_angle + 0.2
-
-                increment_angle = (
-                    increment_angle + np.pi
-                )  # start at opposite side of the circle
-                while True:
-                    gx = np.cos(rand_angle + increment_angle) * 5.5
-                    gy = np.sin(rand_angle + increment_angle) * 5.5
-                    # check whether the goal is inside the human groups
-                    # check whether the initial px and py collides with any human
-                    collision = self.check_collision_group_goal(
-                        (gx, gy), self.robot.radius
-                    )
-                    # if the robot goal does not fall into any human groups, the goal is okay, otherwise keep generating the goal
-                    if not collision:
-                        # print('goal pos angle:', rand_angle + increment_angle)
-                        break
-                    increment_angle = increment_angle + 0.2
-
-                self.robot.set(px_r, py_r, gx, gy, 0, 0, np.pi / 2)
-
-            # for FoV environment
+        if human_num is None:
+            human_num = self.human_num
+        # for Group environment
+        if self.group_human:
+            # set the robot in a dummy far away location to avoid collision with humans
+            if self.config.test.social_metrics:
+                self.robot.set(
+                    0, -self.circle_radius, 0, self.circle_radius, 0, 0, np.pi / 2
+                )
             else:
-                if self.robot.kinematics == "unicycle":
-                    angle = np.random.uniform(0, np.pi * 2)
-                    px = self.circle_radius * np.cos(angle)
-                    py = self.circle_radius * np.sin(angle)
-                    while True:
-                        gx, gy = np.random.uniform(
-                            -self.circle_radius, self.circle_radius, 2
-                        )
-                        if np.linalg.norm([px - gx, py - gy]) >= 6:  # 1 was 6
-                            break
-                    self.robot.set(
-                        px, py, gx, gy, 0, 0, np.random.uniform(0, 2 * np.pi)
-                    )  # randomize init orientation
+                self.robot.set(10, 10, 10, 10, 0, 0, np.pi / 2)
 
-                # randomize starting position and goal position
-                else:
-                    if self.config.test.social_metrics:
-                        self.robot.set(
-                            0,
-                            -self.circle_radius,
-                            0,
-                            self.circle_radius,
-                            0,
-                            0,
-                            np.pi / 2,
-                        )
+            # generate humans
+            self.circle_groups = []
+            humans_left = human_num
+
+            while humans_left > 0:
+                # print("****************\nhumans left: ", humans_left)
+                if humans_left <= 4:
+                    if phase in ["train", "val"]:
+                        self.generate_random_human_position(human_num=humans_left)
                     else:
-                        while True:
-                            px, py, gx, gy = np.random.uniform(
-                                -self.circle_radius, self.circle_radius, 4
-                            )
-                            # ensure minimum distance of 6m
-                            if np.linalg.norm([px - gx, py - gy]) >= 6:
-                                break
-                        self.robot.set(px, py, gx, gy, 0, 0, np.pi / 2)
+                        self.generate_random_human_position(human_num=humans_left)
+                    humans_left = 0
+                else:
+                    if humans_left < 10:
+                        max_rand = humans_left
+                    else:
+                        max_rand = 10
+                    # print("randint from 4 to ", max_rand)
+                    circum_num = np.random.randint(4, max_rand)
+                    # print("circum num: ", circum_num)
+                    self.generate_circle_group_obstacle(circum_num)
+                    humans_left -= circum_num
 
-                # generate humans
-                self.generate_random_human_position(human_num=human_num)
+            # randomize starting position and goal position while keeping the distance of goal to be > 6
+            # set the robot on a circle with radius 5.5 randomly
+            rand_angle = np.random.uniform(0, np.pi * 2)
+            # print('rand angle:', rand_angle)
+            increment_angle = 0.0
+            while True:
+                px_r = np.cos(rand_angle + increment_angle) * 5.5
+                py_r = np.sin(rand_angle + increment_angle) * 5.5
+                # check whether the initial px and py collides with any human
+                collision = self.check_collision_group((px_r, py_r), self.robot.radius)
+                # if the robot goal does not fall into any human groups, the goal is okay, otherwise keep generating the goal
+                if not collision:
+                    # print('initial pos angle:', rand_angle+increment_angle)
+                    break
+                increment_angle = increment_angle + 0.2
+
+            increment_angle = (
+                increment_angle + np.pi
+            )  # start at opposite side of the circle
+            while True:
+                gx = np.cos(rand_angle + increment_angle) * 5.5
+                gy = np.sin(rand_angle + increment_angle) * 5.5
+                # check whether the goal is inside the human groups
+                # check whether the initial px and py collides with any human
+                collision = self.check_collision_group_goal((gx, gy), self.robot.radius)
+                # if the robot goal does not fall into any human groups, the goal is okay, otherwise keep generating the goal
+                if not collision:
+                    # print('goal pos angle:', rand_angle + increment_angle)
+                    break
+                increment_angle = increment_angle + 0.2
+
+            self.robot.set(px_r, py_r, gx, gy, 0, 0, np.pi / 2)
+
+        # for FoV environment
         else:
-            self.generate_side_preference_scenarios()
+            if self.robot.kinematics == "unicycle":
+                angle = np.random.uniform(0, np.pi * 2)
+                px = self.circle_radius * np.cos(angle)
+                py = self.circle_radius * np.sin(angle)
+                while True:
+                    gx, gy = np.random.uniform(
+                        -self.circle_radius, self.circle_radius, 2
+                    )
+                    if np.linalg.norm([px - gx, py - gy]) >= 6:  # 1 was 6
+                        break
+                self.robot.set(
+                    px, py, gx, gy, 0, 0, np.random.uniform(0, 2 * np.pi)
+                )  # randomize init orientation
 
-    def generate_side_preference_scenarios(self):
-        # NOTE: for all side preference scenarios, only 2 agents are present,
-        # 1 human and 1 robot, so the neural network needs to be able to handle
-        # this by duplicating the observation of the human
-        human = Human(self.config, "humans")
-        self.robot.set(0, -self.circle_radius, 0, self.circle_radius, 0, 0, np.pi / 2)
-        scenario = self.config.test.side_preference_scenario
-        for i in range(self.human_num):
-            if scenario in ["passing", "overtaking"]:
-                min_x = -(self.robot.radius + human.radius)
-                max_x = self.robot.radius + human.radius
-                human_x = (max_x - min_x) * np.random.random() + min_x
-                if "passing" in scenario:
-                    human.set(
-                        human_x,
-                        self.circle_radius,
-                        human_x,
+            # randomize starting position and goal position
+            else:
+                if self.config.test.social_metrics or self.config.test.side_preference:
+                    self.robot.set(
+                        0,
                         -self.circle_radius,
                         0,
-                        0,
-                        -np.pi / 2,
-                    )
-                elif "overtaking" in scenario:
-                    offset = 2
-                    human.set(
-                        human_x,
-                        -self.circle_radius + offset,
-                        human_x,
-                        self.circle_radius + offset,
+                        self.circle_radius,
                         0,
                         0,
                         np.pi / 2,
-                        v_pref=0.3,
                     )
-            elif scenario in "crossing":
-                min_x = -(self.circle_radius + self.robot.radius + human.radius)
-                max_x = -(self.circle_radius - self.robot.radius - human.radius)
-                human_x = (max_x - min_x) * np.random.random() + min_x
+                else:
+                    while True:
+                        px, py, gx, gy = np.random.uniform(
+                            -self.circle_radius, self.circle_radius, 4
+                        )
+                        # ensure minimum distance of 6m
+                        if np.linalg.norm([px - gx, py - gy]) >= 6:
+                            break
+                    self.robot.set(px, py, gx, gy, 0, 0, np.pi / 2)
 
-                human.set(human_x, 0, -human_x, 0, 0, 0, 0)
-            self.humans.append(human)
+            # generate humans
+            self.generate_random_human_position(human_num=human_num)
 
     def reset(self, phase="train", test_case=None):
         """
@@ -783,7 +757,9 @@ class CrowdSim(gym.Env):
                 human.v_pref += np.random.uniform(-0.1, 0.1)
 
             while True:
-                _, _, gx, gy = self.create_start_end_pts(self.current_scenario, human)
+                _, _, gx, gy, _, _ = self.create_agent_attributes(
+                    self.current_scenario, human
+                )
                 collide = False
                 if self.group_human:
                     collide = self.check_collision_group((gx, gy), human.radius)
@@ -958,7 +934,7 @@ class CrowdSim(gym.Env):
         # SOCIAL METRIC 6
         if self.config.test.side_preference:
             side_preference = {"left": 0, "right": 0}
-            scenario = self.config.test.side_preference_scenario
+            scenario = self.current_scenario
             end_pos_r = self.robot.compute_position(action, self.time_step)
             # self.humans should only contain 1 human
             h = self.humans[0]
@@ -995,12 +971,10 @@ class CrowdSim(gym.Env):
             self.robot.get_position(), self.robot.get_goal_position()
         )
 
-        world_size = self.config.sim.square_width
-        world_box = Rectangle(world_size, world_size)
         robot_ellipse = make_shapely_ellipse(
             self.robot.radius, self.robot.get_goal_position()
         )
-        inside_world = True if robot_ellipse.intersects(world_box._rect) else False
+        inside_world = True if robot_ellipse.intersects(self.world_box._rect) else False
 
         # SOCIAL METRIC 5
         speed = (action.vx ** 2 + action.vy ** 2) ** 0.5
@@ -1380,6 +1354,12 @@ class CrowdSim(gym.Env):
 
             ax.add_artist(human_circle)
             artists.add(human_circle)
+
+        # DRAW BOX
+        walls_coords = self.world_box._rect.exterior.coords
+        walls = patches.Polygon(xy=walls_coords, fill=False)
+        ax.add_artist(walls)
+        artists.add(walls)
 
         ###### END DRAWING HUMANS ######
         # could we speed up further by removing this loop?

@@ -140,13 +140,17 @@ class CrowdSimDict(CrowdSim):
         # get robot observation
         ob = self.generate_ob(reset=True)
 
-        # initialize potential
+        # initialize potential_cur
+        robot_xy = self.robot.get_position()
+        vx, vy = self.robot.get_observable_state_list()[2:4]
+        robot_heading = np.arctan2(vy, vx)
         self.potential = -abs(
             np.linalg.norm(
-                np.array([self.robot.px, self.robot.py])
-                - np.array([self.robot.gx, self.robot.gy])
+                np.array(robot_xy) - np.array(self.robot.get_goal_position())
             )
         )
+
+        self.lidar.update_sensor(self.robot.get_position(), robot_heading)
 
         return ob
 
@@ -169,10 +173,19 @@ class CrowdSimDict(CrowdSim):
         # compute reward and episode info
         reward, done, episode_info = self.calc_reward(action)
 
+        lidar_humans = []
         # apply action and update all agents
         self.robot.step(action)
         for i, human_action in enumerate(human_actions):
             self.humans[i].step(human_action)
+            state = self.humans[i].get_observable_state_list()
+            lidar_humans.append((state[0], state[1], state[-1]))
+
+        # parse all obstacles and walls
+        self.lidar.parse_obstacles(lidar_humans, "agents")
+        world_box_pts = list(self.world_box._rect.exterior.coords)
+        self.lidar.parse_obstacles(world_box_pts, "walls")
+
         self.global_time += self.time_step  # max episode length=time_limit/time_step
 
         # compute the observation

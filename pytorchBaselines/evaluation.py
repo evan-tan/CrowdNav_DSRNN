@@ -80,17 +80,19 @@ def evaluate(
     # START ALL SIDE PREFERENCE EPISODES
     if config.test.side_preference:
         side_preferences = {
-            "passing": {"left": 0, "right": 0},
-            "overtaking": {"left": 0, "right": 0},
-            "crossing": {"left": 0, "right": 0},
+            "side_pref_passing": {"left": 0, "right": 0},
+            "side_pref_overtaking": {"left": 0, "right": 0},
+            "side_pref_crossing": {"left": 0, "right": 0},
         }
         side_counter = {"left": 0, "right": 0}
-        scenario = config.test.side_preference_scenario
+        # NOTE: special case of testing side preference
+        assert len(config.sim.test_sim) == 1
+        scenario = config.sim.test_sim[0]
 
     num_events = create_events_dict(config)
 
     obs = eval_envs.reset()
-    test_size = config.env.test_size if not config.test.side_preference else 200
+    test_size = config.env.test_size
     for k in range(test_size):
         done = False
         episode_rewards = []
@@ -311,15 +313,17 @@ def evaluate(
     metrics.add_metric("cumulative heading change", chc_total)
 
     # social conformity metrics
-    metrics.add_metric("SM1 - personal space violation", personal_violation_times)
-    metrics.add_metric("SM2 - path violation", path_violation_times)
-    metrics.add_metric("SM3 - aggregate time", aggregate_nav_times)
-    metrics.add_metric("SM4 - jerk cost", jerk_costs)
-    metrics.add_metric("SM5 - speed violation", speed_violation_times)
+    if config.test.social_metrics:
+        metrics.add_metric("SM1 - personal space violation", personal_violation_times)
+        metrics.add_metric("SM2 - path violation", path_violation_times)
+        metrics.add_metric("SM3 - aggregate time", aggregate_nav_times)
+        metrics.add_metric("SM4 - jerk cost", jerk_costs)
+        metrics.add_metric("SM5 - speed violation", speed_violation_times)
     if config.test.side_preference:
         left_percentage = side_preferences[scenario]["left"] / test_size
         right_percentage = side_preferences[scenario]["right"] / test_size
-        logging.info(f"Side Preference - {scenario}")
+        logging.info("")
+        logging.info(f"Side Preference - {scenario} ======")
         logging.info(f"Left % = {100*left_percentage:.3f}%")
         logging.info(f"Right % = {100*right_percentage:.3f}%")
 

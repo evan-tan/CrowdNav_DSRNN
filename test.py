@@ -48,7 +48,11 @@ def main():
     test_parser.add_argument(
         "--num_threads", type=int, default=1, help="Number of threads to allocate"
     )
-    test_parser.add_argument("--diagnostics", action="store_true", help="Whether or not to plot cum. rewards and distance to goal versus time when studying specific cases or scenarios")
+    test_parser.add_argument(
+        "--study_scenario",
+        action="store_true",
+        help="Whether or not to plot cum. rewards and distance to goal versus time when studying specific cases or scenarios",
+    )
     test_args = test_parser.parse_args()
 
     model_dir_temp = test_args.model_dir
@@ -154,7 +158,7 @@ def main():
 
     if test_args.visualize:
         fig, ax = plt.subplots(figsize=(7, 7))
-        val = config.sim.square_width
+        val = config.sim.square_width + 5
         ax.set_xlim(-val / 2, val / 2)
         ax.set_ylim(-val / 2, val / 2)
         ax.set_xlabel("x(m)", fontsize=16)
@@ -215,7 +219,7 @@ def main():
         recurrent_type=recurrent_cell,
     )
 
-    if test_args.diagnostics:
+    if test_args.study_scenario:
         # plot cumulative reward vs time step
         metrics = [raw_rewards, discounted_rewards, dist_to_goal]
         COLORS = ("b", "g", "r", "c", "m", "y", "k", "w")
@@ -253,8 +257,13 @@ def main():
         if not plot_dir.exists():
             plot_dir.mkdir()
 
-        fig1.savefig(f"{str(plot_dir)}/rewards_vs_time_{key}_case_{test_args.test_case}", dpi=1200)
-        fig2.savefig(f"{str(plot_dir)}/d2g_vs_time_{key}_case_{test_args.test_case}", dpi=1200)
+        fig1.savefig(
+            f"{str(plot_dir)}/rewards_vs_time_{key}_case_{test_args.test_case}",
+            dpi=1200,
+        )
+        fig2.savefig(
+            f"{str(plot_dir)}/d2g_vs_time_{key}_case_{test_args.test_case}", dpi=1200
+        )
         print(f"Saved plots to {str(plot_dir)}")
 
 

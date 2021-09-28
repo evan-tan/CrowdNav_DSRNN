@@ -1,3 +1,5 @@
+from typing import List
+
 import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
 import numpy as np
@@ -15,6 +17,8 @@ from shapely.geometry import LineString, Point
 
 
 class LidarSensor:
+    """LiDAR Sensor to create occupancy maps using both dynamic and static obstacles"""
+
     # specify rounding to N decimal places
     NUM_DP = 3
 
@@ -27,7 +31,7 @@ class LidarSensor:
         self.ANGLES = np.linspace(0, 360, cfg["num_spacings"] + 1)
 
         self.obstacles = {}
-        self.mpl_dict = {}
+        self.mpl_dict = {}  # store matplotlib objects
         self.collision_pts = []  # absolute x,y where beams end
 
     def parse_obstacles(
@@ -35,6 +39,7 @@ class LidarSensor:
         obstacle_pts: list,
         mode="",
     ):
+        """Parse dynamic/static obstacles for collision checking when updating sensor"""
         if "walls" in mode:
             # create polygon representing walls
             self.obstacles["walls"] = [make_shapely_polygon(obstacle_pts)]
@@ -49,7 +54,14 @@ class LidarSensor:
         else:
             pass
 
-    def update_sensor(self, xy_pos=None, heading=None):
+    def update_sensor(self, xy_pos: List[float] = None, heading: float = None):
+        """Update sensor according to position and heading
+
+        :param xy_pos: Robot position, defaults to None
+        :type xy_pos: List[float], optional
+        :param heading: Robot heading, defaults to None
+        :type heading: float, optional
+        """
         if xy_pos is not None:
             self.SENSOR_POS = [xy_pos[0], xy_pos[1]]
         if heading is not None:

@@ -8,18 +8,54 @@ class BaseConfig(object):
 
 class Config(object):
     test = BaseConfig()
-    test.side_preference = False
-    # NOTE: only 2 agents used in testing side preference
-    # select from ["passing", "overtaking", "crossing"]
-    test.side_preference_scenario = "passing"
     test.social_metrics = False
+
+    sim = BaseConfig()
+    sim.render = False  # show GUI for visualization
+    # currently selected at random
+    # select which scenarios you would like to train
+    sim.train_val_sim = [
+        "circle_crossing",
+        "square_crossing",
+        "parallel_traffic",
+        "perpendicular_traffic",
+    ]
+    # select which scenarios you would like to test
+    # NOTE: use ["side_pref_passing", "side_pref_overtaking", "side_pref_crossing"] IN A SINGLE ELEM LIST to test side_preference
+    sim.test_sim = [
+        "circle_crossing",
+        "square_crossing",
+        "parallel_traffic",
+        "perpendicular_traffic",
+        # "side_preference_passing",
+        # "side_preference_overtaking",
+        # "side_preference_overtaking"
+    ]
+    sim.square_width = 20
+
+    # automatically infer based on selected scenario
+    test.side_preference = any("side_pref" in s_ for s_ in sim.test_sim)
+
+    sim.circle_radius = 6 if not test.social_metrics and not test.side_preference else 4
+    sim.human_num = 5 if not test.side_preference else 1
+    # Group environment: set to true; FoV environment: false
+    sim.group_human = False
+
+    lidar = BaseConfig
+    lidar.cfg = {"max_range": np.sqrt(2) * sim.square_width / 2, "num_spacings": 360}
 
     env = BaseConfig()
     env.env_name = "CrowdSimDict-v0"  # name of the environment
     env.time_limit = 50
     env.time_step = 0.25
     env.val_size = 100
-    env.test_size = 500 if not test.social_metrics else 2000
+    env.test_size = 500
+
+    if test.social_metrics:
+        env.test_size = 2000
+    elif test.side_preference:
+        env.test_size = 200
+
     env.randomize_attributes = True
     env.seed = 0  # env random seed
 
@@ -46,29 +82,6 @@ class Config(object):
     reward.gamma = 0.99  # discount factor for rewards
     # from SA-CADRL
     reward.norm_zone_penalty = -0.05
-
-    sim = BaseConfig()
-    sim.render = False  # show GUI for visualization
-    # currently selected at random
-    # select which scenarios you would like to train
-    sim.train_val_sim = [
-        "circle_crossing",
-        "square_crossing",
-        "parallel_traffic",
-        "perpendicular_traffic",
-    ]
-    # select which scenarios you would like to test
-    sim.test_sim = [
-        "circle_crossing",
-        "square_crossing",
-        "parallel_traffic",
-        "perpendicular_traffic",
-    ]
-    sim.square_width = 20
-    sim.circle_radius = 6 if not test.side_preference and not test.social_metrics else 4
-    sim.human_num = 5 if not test.side_preference else 1
-    # Group environment: set to true; FoV environment: false
-    sim.group_human = False
 
     humans = BaseConfig()
     humans.visible = True  # a human is visible to other humans and the robot

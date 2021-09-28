@@ -1,3 +1,4 @@
+from collections import deque
 from typing import List
 
 import matplotlib.lines as mlines
@@ -7,21 +8,44 @@ from crowd_sim.envs.utils.agent import Agent
 
 
 def create_events_dict(config):
-    # store a dict of dicts to ...
+    """Create nested events dictionary to count terminal states for each different scenario from config.py
+
+    :param config: CrowdSim config
+    :type config: Config
+    :return: dictionary containing all events as keys
+    :rtype: dict of dicts
+    """
     # breakdown cases according to scenarios
     num_events = {
         "success": {},
         "collision": {},
         "timeout": {},
     }
-    for k in num_events.keys():
-        num_events[k]["total"] = 0
-        for scenario in config.sim.train_val_sim:
-            num_events[k][scenario] = 0
+    # create a set of unique keys
+    scenarios = set(config.sim.train_val_sim).union(set(config.sim.test_sim))
+    for key in num_events.keys():
+        num_events[key]["total"] = 0
+        for scenario in scenarios:
+            num_events[key][scenario] = 0
     return num_events
 
 
+def depth(d):
+    """Check dictionary depth"""
+    if isinstance(d, dict):
+        return 1 + (max(map(depth, d.values())) if d else 0)
+    return 0
+
+
 def log_events_dict(events_dict, logger):
+    """Log events dictionary to logfile during testing
+
+    :param events_dict: events dictionary with depth 2
+    :type events_dict: dict of dicts
+    :param logger: logging module or logger object
+    :type logger: logging object
+    """
+    assert depth(events_dict) == 2
     for k in events_dict.keys():
         logger.info("")
         logger.info(f"{k.upper()} CASES: ")
@@ -30,13 +54,13 @@ def log_events_dict(events_dict, logger):
 
 
 def rand_world_pt(config):
-    # generate random world point based on square_width
+    """Generate random world point based on square_width"""
     # this assumes world is centered at (0,0)
     return (np.random.random() - 0.5) * config.sim.square_width / 2
 
 
-# wrap angle between [-180, 180]
 def wrap_angle(angle):
+    """Wrap angle between [-180, 180]"""
     while angle <= -np.pi:
         angle += 2 * np.pi
     while angle > np.pi:
@@ -45,18 +69,21 @@ def wrap_angle(angle):
 
 
 def vec_norm(A, B):
+    """Small wrapper to calculate L2 norm for 2 points"""
     return np.linalg.norm([A[0] - B[0], A[1] - B[1]])
 
 
-def make_mpl_line(x, y):
-    return mlines.Line2D(
-        x, y, marker="o", markersize=2, color="r", solid_capstyle="round"
-    )
-
-
-# smoothing function for visualizing noisy training data
 # https://stackoverflow.com/questions/42281844/what-is-the-mathematics-behind-the-smoothing-parameter-in-tensorboards-scalar
 def smooth_data(scalars: List[float], weight: float) -> List[float]:
+    """Tensorboard smoothing function to smooth noisy training data
+
+    :param scalars: data points to smooth
+    :type scalars: List[float]
+    :param weight: Exponential Moving Average weight in 0-1
+    :type weight: float
+    :return: smoothed data points
+    :rtype: List[float]
+    """
     assert weight >= 0 and weight <= 1
     last = scalars[0]  # First value in the plot (first timestep)
     smoothed = list()
@@ -68,7 +95,15 @@ def smooth_data(scalars: List[float], weight: float) -> List[float]:
     return smoothed
 
 
+def make_mpl_line(x, y):
+    """Wrapper to create matplotlib line"""
+    return mlines.Line2D(
+        x, y, marker="o", markersize=2, color="r", solid_capstyle="round"
+    )
+
+
 def make_shapely_polygon(pts):
+    """Wrapper to create Shapely polygon"""
     # ensure wrap around
     if pts[0] != pts[-1]:
         pts.append(pts[0])
@@ -76,6 +111,7 @@ def make_shapely_polygon(pts):
 
 
 def make_shapely_ellipse(radius, position, downsample=True):
+    """Wrapper to create Shapely ellipse"""
     ellipse = shapely.geometry.Point(position[0], position[1]).buffer(radius)
     if downsample:
         ellipse = ellipse.simplify(0.1)
@@ -84,6 +120,10 @@ def make_shapely_ellipse(radius, position, downsample=True):
 
 # https://shapely.readthedocs.io/en/stable/manual.html#shapely.geometry.box
 class Rectangle:
+    """Rectangle base class.
+    Creates rectangle centered at the origin (0,0).
+    """
+
     def __init__(self, width, length):
         # create vertical rectangle with center at (0,0) with heading of +90deg
         self._rect = shapely.geometry.box(
@@ -106,11 +146,13 @@ class Rectangle:
 
 # https://shapely.readthedocs.io/en/stable/manual.html#shapely.geometry.box
 class VelocityRectangle(Rectangle):
+    """Class to create VelocityRectangles that project agent's velocity by a factor to calculate social metric violations"""
+
     # k=3, how many time steps ahead to extend velocity rectangle by
     LENGTH_SCALE = 3
     WIDTH_SCALE = 1
 
-    def __init__(self, agent: Agent):
+    def __init__(self, agent: Agent = None):
         self._agent = agent
         assert agent is not None
 
@@ -120,7 +162,8 @@ class VelocityRectangle(Rectangle):
         radius = properties[4]
         rwidth = 2 * radius * self.WIDTH_SCALE
         rlength = self.LENGTH_SCALE * (vx ** 2 + vy ** 2) ** 0.5
-        # DO NOT USE self._agent.theta as it is never updated
+
+        # NOTE: DO NOT USE self._agent.theta as it is never updated
         # -90deg since origin_rect is ALREADY oriented at +90deg
         agent_heading = np.arctan2(vy, vx)
         dtheta = agent_heading - np.pi / 2
@@ -138,6 +181,8 @@ class VelocityRectangle(Rectangle):
 
 
 class NormZoneRectangle(Rectangle):
+    """Class to create NormZoneRectangle (aka social norm zones) as suggested in SARL/LM-SARL paper"""
+
     LENGTH_SCALE = 1
     WIDTH_SCALE = 1
 
@@ -181,42 +226,3 @@ class NormZoneRectangle(Rectangle):
         self._rotate(dtheta, (0, 0))
         # translate to get final rect
         self._translate(x_os, y_os)
-
-
-class SidePreference:
-    def __init__(self, pos_hist_agents: dict, num_time_steps: int):
-        self.history = pos_hist_agents
-        self.t_steps = num_time_steps
-        assert self.t_steps >= 2
-        self.proximity_radius = 1.5  # metres
-
-    def _determine_gesture(pos_r, pos_h):
-        # TODO
-        # translate human coordinate to the robot's position
-        # calculate vectors for robot and human
-        # if conditions to determine between 3 gestures [passing, overtaking, crossing]
-        for k in range(len(pos_r)):
-            pass
-
-    def _slice_pos_hist(self, idx, key: str):
-        # get slice of position history based on number of time steps
-        pos_hist_slice = []
-        offset = 0
-        for _ in range(self.t_steps):
-            pos_hist_slice.append(self.history.get(key)[self.t_steps * idx + offset])
-            offset += 1
-        return pos_hist_slice
-
-    def calculate_side_preference(self):
-        n_humans = len(self.history.keys()) - 1
-        # all positions of the robot
-        all_pos_r = self.history.get("robot")
-        n_iter = len(all_pos_r) // self.t_steps
-        for i in range(n_iter):
-            set_pos_r = self._slice_pos_hist(i, "robot")
-            for j in range(n_humans):
-                key = "human_{}".format(j + 1)
-                set_pos_h = self._slice_pos_hist(i, key)
-                gesture = self._determine_gesture(set_pos_r, set_pos_h)
-                # TODO take gesture that occurs most
-                pass
