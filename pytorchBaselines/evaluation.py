@@ -197,8 +197,8 @@ def evaluate(
 
         # multiple steps in each episode, but we want to label with single value. calculate number of occurrences of left and right and take highest
         if config.test.side_preference:
-            for k in side_counter.keys():
-                side_counter[k] /= step_counter
+            for side in side_counter.keys():
+                side_counter[side] /= step_counter
 
         tmp_disc_reward = [
             pow(gamma, t * base_env.robot.time_step * base_env.robot.v_pref) * reward
