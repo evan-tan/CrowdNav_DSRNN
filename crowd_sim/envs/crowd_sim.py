@@ -306,27 +306,27 @@ class CrowdSim(gym.Env):
             gx = -px
             py = rand_world_pt(self.config) * 0.4 + py_noise
             gy = py
-        elif "side_pref_passing" or "side_pref_overtaking" in scenario:
+        elif scenario in ["side_pref_passing", "side_pref_overtaking"]:
             min_x = -(self.robot.radius + agent.radius)
             max_x = -min_x
             human_x = (max_x - min_x) * np.random.random() + min_x
-            px = human_x
-            gx = px
-            py = self.circle_radius
-            gy = -py
+            px, gx = human_x, human_x
             if "side_pref_passing" in scenario:
+                py, gy = self.circle_radius, -self.circle_radius
                 heading = -np.pi / 2
-            if "side_pref_overtaking" in scenario:
+            elif "side_pref_overtaking" in scenario:
                 offset = 2
-                py += offset
-                gy += offset
+                py = -self.circle_radius + offset
+                gy = self.circle_radius + offset
+                # flip to opposite side and offset
                 heading = np.pi / 2
                 v_pref = 0.3
-        elif "side_pref_crossing" in scenario:
+        elif scenario in "side_pref_crossing":
             min_x = -(self.circle_radius + self.robot.radius + agent.radius)
             max_x = -(self.circle_radius - self.robot.radius - agent.radius)
             human_x = (max_x - min_x) * np.random.random() + min_x
-
+            px, gx = human_x, -human_x
+            py, gy = 0, 0
         # generate spawn and goal positions
         return px, py, gx, gy, heading, v_pref
 
