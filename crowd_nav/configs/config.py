@@ -41,7 +41,7 @@ class Config(object):
     # Group environment: set to true; FoV environment: false
     sim.group_human = False
 
-    lidar = BaseConfig
+    lidar = BaseConfig()
     lidar.cfg = {"max_range": np.sqrt(2) * sim.square_width / 2, "num_spacings": 360}
 
     env = BaseConfig()
