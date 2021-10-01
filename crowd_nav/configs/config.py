@@ -27,9 +27,9 @@ class Config(object):
         "square_crossing",
         "parallel_traffic",
         "perpendicular_traffic",
-        # "side_preference_passing",
-        # "side_preference_overtaking",
-        # "side_preference_overtaking"
+        "side_pref_passing",
+        "side_pref_overtaking",
+        "side_pref_crossing",
     ]
     sim.square_width = 20
 
@@ -196,7 +196,7 @@ class Config(object):
     )
     training.cuda = True  # use CUDA for training
     training.num_processes = 12  # how many training CPU processes to use
-    training.output_dir = "data/dummy"  # the saving directory for train.py
+    training.output_dir = "data/fov_360_add_train_scenarios_gamma_0_9"  # the saving directory for train.py
     training.resume = False  # resume training from an existing checkpoint or not
     training.load_path = None  # if resume = True, load from the following checkpoint
     training.overwrite = True  # whether to overwrite the output directory in training
