@@ -102,15 +102,18 @@ def make_mpl_line(x, y):
     )
 
 
-def make_shapely_polygon(pts):
+def make_shapely_polygon(pts, downsample=False):
     """Wrapper to create Shapely polygon"""
     # ensure wrap around
     if pts[0] != pts[-1]:
         pts.append(pts[0])
-    return shapely.geometry.Polygon(pts)
+    poly = shapely.geometry.Polygon(pts)
+    if downsample:
+        poly = poly.simplify(0.1)
+    return poly
 
 
-def make_shapely_ellipse(radius, position, downsample=True):
+def make_shapely_ellipse(radius, position, downsample=False):
     """Wrapper to create Shapely ellipse"""
     ellipse = shapely.geometry.Point(position[0], position[1]).buffer(radius)
     if downsample:
