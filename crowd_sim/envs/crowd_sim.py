@@ -23,7 +23,9 @@ from crowd_sim.envs.utils.helper import (
 )
 from crowd_sim.envs.utils.human import Human
 from crowd_sim.envs.utils.info import Collision, Danger, Nothing, ReachGoal, Timeout
-from crowd_sim.envs.utils.lidar import LidarSensor
+
+# from crowd_sim.envs.utils.lidar import LidarSensor
+from crowd_sim.envs.utils.lidarv2 import LidarSensor
 from crowd_sim.envs.utils.robot import Robot
 from crowd_sim.envs.utils.state import *
 
@@ -221,6 +223,7 @@ class CrowdSim(gym.Env):
         world_size = self.config.sim.square_width
         self.world_box = Rectangle(world_size, world_size)
         self.lidar = LidarSensor(config.lidar.cfg)
+        self.lidar_end_pts = None
         return
 
     def set_robot(self, robot):
@@ -1360,6 +1363,10 @@ class CrowdSim(gym.Env):
         walls = patches.Polygon(xy=walls_coords, fill=False)
         ax.add_artist(walls)
         artists.add(walls)
+        if self.lidar_end_pts is not None:
+            lidar = patches.Polygon(xy=self.lidar_end_pts, fill=False)
+            ax.add_artist(lidar)
+            artists.add(lidar)
 
         ###### END DRAWING HUMANS ######
         # could we speed up further by removing this loop?
