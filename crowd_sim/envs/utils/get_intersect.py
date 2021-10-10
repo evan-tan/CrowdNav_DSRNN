@@ -69,6 +69,25 @@ def check_intersect(p1, q1, p2, q2):
     return False
 
 
+# SOURCE: https://stackoverflow.com/questions/20677795/how-do-i-compute-the-intersection-point-of-two-lines
+def line_intersection(line1, line2):
+    xdiff = (line1[0][0] - line1[1][0], line2[0][0] - line2[1][0])
+    ydiff = (line1[0][1] - line1[1][1], line2[0][1] - line2[1][1])
+
+    # define local function
+    def det(a, b):
+        return a[0] * b[1] - a[1] * b[0]
+
+    div = det(xdiff, ydiff)
+    x, y = None, None
+
+    if div != 0:
+        d = (det(*line1), det(*line2))
+        x = det(d, xdiff) / div
+        y = det(d, ydiff) / div
+    return x, y
+
+
 # SOURCE: https://stackoverflow.com/questions/3252194/numpy-and-line-intersections
 def get_intersect(p1, q1, p2, q2):
     """
@@ -82,13 +101,17 @@ def get_intersect(p1, q1, p2, q2):
     is_intersecting = check_intersect(p1, q1, p2, q2)
     intersect_pt = None
     if is_intersecting:
-        s = np.vstack([p1, q1, p2, q2])  # s for stacked
-        h = np.hstack((s, np.ones((4, 1))))  # h for homogeneous
-        l1 = np.cross(h[0], h[1])  # get first line
-        l2 = np.cross(h[2], h[3])  # get second line
-        x, y, z = np.cross(l1, l2)  # point of intersection
-        if z != 0:
-            intersect_pt = [x / z, y / z]
+        # using this shaves off ~0.5s per 100iterations for the LiDAR code
+        x, y = line_intersection((p1, q1), (p2, q2))
+        intersect_pt = [x, y]
+    # if is_intersecting:
+    #     s = np.vstack([p1, q1, p2, q2])  # s for stacked
+    #     h = np.hstack((s, np.ones((4, 1))))  # h for homogeneous
+    #     l1 = np.cross(h[0], h[1])  # get first line
+    #     l2 = np.cross(h[2], h[3])  # get second line
+    #     x, y, z = np.cross(l1, l2)  # point of intersection
+    #     if z != 0:
+    #         intersect_pt = [x / z, y / z]
     return intersect_pt
 
 

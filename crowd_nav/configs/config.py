@@ -42,7 +42,7 @@ class Config(object):
     sim.group_human = False
 
     lidar = BaseConfig()
-    lidar.cfg = {"max_range": np.sqrt(2) * sim.square_width / 2, "num_spacings": 360}
+    lidar.cfg = {"max_range": 5, "num_beams": 360}
 
     env = BaseConfig()
     env.env_name = "CrowdSimDict-v0"  # name of the environment

@@ -140,17 +140,33 @@ class CrowdSimDict(CrowdSim):
         # get robot observation
         ob = self.generate_ob(reset=True)
 
-        # initialize potential_cur
         robot_xy = self.robot.get_position()
         vx, vy = self.robot.get_observable_state_list()[2:4]
         robot_heading = np.arctan2(vy, vx)
+
+        # parse all obstacles and walls
+        if self.lidar is not None:
+            human_xyr = []
+            for i, _ in enumerate(self.humans):
+                state = self.humans[i].get_observable_state_list()
+            human_xyr.append([state[0], state[1], state[-1]])
+            human_xyr = np.array(human_xyr)
+            self.lidar.parse_obstacles(human_xyr, "agents")
+            self.lidar.parse_obstacles(self.wall_pts, "walls")
+
+            self.lidar.update_sensor(robot_xy, robot_heading)
+            angles, rel_distances, lidar_end_pts = self.lidar.sensor_spin(
+                normalize=True
+            )
+
+            self.lidar_end_pts = lidar_end_pts
+
+        # initialize potential_cur
         self.potential = -abs(
             np.linalg.norm(
                 np.array(robot_xy) - np.array(self.robot.get_goal_position())
             )
         )
-
-        self.lidar.update_sensor(robot_xy, robot_heading)
 
         return ob
 
@@ -173,24 +189,29 @@ class CrowdSimDict(CrowdSim):
         # compute reward and episode info
         reward, done, episode_info = self.calc_reward(action)
 
-        human_xyr = np.zeros((len(self.humans), 3))
+        human_xyr = []
         # apply action and update all agents
         self.robot.step(action)
         for i, human_action in enumerate(human_actions):
             self.humans[i].step(human_action)
             state = self.humans[i].get_observable_state_list()
-            human_xyr[i, :] = np.array([state[0], state[1], state[-1]])
+            human_xyr.append([state[0], state[1], state[-1]])
 
         # parse all obstacles and walls
-        self.lidar.parse_obstacles(human_xyr, "agents")
-        world_box_pts = list(self.world_box._rect.exterior.coords)
-        self.lidar.parse_obstacles(world_box_pts, "walls")
-        robot_xy = self.robot.get_position()
-        vx, vy = self.robot.get_observable_state_list()[2:4]
-        robot_heading = np.arctan2(vy, vx)
-        self.lidar.update_sensor(robot_xy, robot_heading)
-        angles, rel_distances = self.lidar.sensor_spin(normalize=True)
-        self.lidar_end_pts = self.lidar.get_viz_pts("global_end_pts")
+        if self.lidar is not None:
+            human_xyr = np.array(human_xyr)
+            self.lidar.parse_obstacles(human_xyr, "agents")
+            self.lidar.parse_obstacles(self.wall_pts, "walls")
+
+            robot_xy = self.robot.get_position()
+            vx, vy = self.robot.get_observable_state_list()[2:4]
+            robot_heading = np.arctan2(vy, vx)
+            self.lidar.update_sensor(robot_xy, robot_heading)
+            angles, rel_distances, lidar_end_pts = self.lidar.sensor_spin(
+                normalize=True
+            )
+
+            self.lidar_end_pts = lidar_end_pts
 
         self.global_time += self.time_step  # max episode length=time_limit/time_step
 

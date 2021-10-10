@@ -23,8 +23,6 @@ from crowd_sim.envs.utils.helper import (
 )
 from crowd_sim.envs.utils.human import Human
 from crowd_sim.envs.utils.info import Collision, Danger, Nothing, ReachGoal, Timeout
-
-# from crowd_sim.envs.utils.lidar import LidarSensor
 from crowd_sim.envs.utils.lidarv2 import LidarSensor
 from crowd_sim.envs.utils.robot import Robot
 from crowd_sim.envs.utils.state import *
@@ -222,6 +220,8 @@ class CrowdSim(gym.Env):
 
         world_size = self.config.sim.square_width
         self.world_box = Rectangle(world_size, world_size)
+        t = world_size / 2
+        self.wall_pts = [(-t, -t), (t, -t), (t, t), (-t, t)]
         self.lidar = LidarSensor(config.lidar.cfg)
         self.lidar_end_pts = None
         return
@@ -1197,7 +1197,34 @@ class CrowdSim(gym.Env):
             return newPoint
 
         ax = self.render_axis
-        artists = set()
+        # NOTE: sets are NOT ordered
+        unordered_artists = set()  # use set to speed up animation,
+        ordered_artists = list()  # use for drawings that have to be in foreground
+
+        ###### START LIDAR DRAWING #####
+        from crowd_sim.envs.utils.lidarv2 import rotate, unsqueeze
+
+        if self.lidar_end_pts is not None:
+            lidar_poly = patches.Polygon(self.lidar_end_pts, fill=False)
+            ax.add_artist(lidar_poly)
+            ordered_artists.append(lidar_poly)
+
+            # for i in range(self.lidar_end_pts.shape[0]):
+            #     # color first line different
+            #     color = "r" if i == 0 else "k"
+            #     x_data = (self.lidar.sensor_pos[0], self.lidar_end_pts[i, 0])
+            #     y_data = (self.lidar.sensor_pos[1], self.lidar_end_pts[i, 1])
+            #     lidar_beam = mlines.Line2D(x_data, y_data, color=color, alpha=0.5)
+            #     ax.add_artist(lidar_beam)
+            #     unordered_artists.add(lidar_beam)
+
+        ##### END LIDAR DRAWING #####
+
+        # DRAW BOX
+        walls_coords = self.world_box._rect.exterior.coords
+        walls = patches.Polygon(xy=walls_coords, fill=False)
+        ax.add_artist(walls)
+        unordered_artists.add(walls)
 
         ###### START ROBOT DRAWING ######
 
@@ -1205,9 +1232,9 @@ class CrowdSim(gym.Env):
             polygon = patches.Polygon(
                 xy=self.robot_VR._rect.exterior.coords, fill=False
             )
-            polygon.set_animated(True)
+            polygon.set_animated(False)
             ax.add_artist(polygon)
-            artists.add(polygon)
+            unordered_artists.add(polygon)
 
         # add goal
         goal = mlines.Line2D(
@@ -1221,7 +1248,7 @@ class CrowdSim(gym.Env):
         )
         goal.set_animated(False)
         ax.add_artist(goal)
-        artists.add(goal)
+        unordered_artists.add(goal)
 
         # add robot
         robotX, robotY = self.robot.get_position()
@@ -1230,13 +1257,12 @@ class CrowdSim(gym.Env):
         )
         robot.set_animated(True)
         ax.add_artist(robot)
-        artists.add(robot)
+        ordered_artists.append(robot)
 
-        # how do we blit this?
         blit_legend = plt.legend([robot, goal], ["Robot", "Goal"], fontsize=16)
         blit_legend.set_animated(False)
         ax.add_artist(blit_legend)
-        artists.add(blit_legend)
+        ordered_artists.append(blit_legend)
 
         robot_speed = mtext.Text(
             self.robot.get_position()[0],
@@ -1247,7 +1273,7 @@ class CrowdSim(gym.Env):
         )
         robot_speed.set_animated(True)
         ax.add_artist(robot_speed)
-        artists.add(robot_speed)
+        ordered_artists.append(robot_speed)
 
         if "unicycle" in self.robot.kinematics:
             robot_theta = self.robot.theta
@@ -1264,7 +1290,7 @@ class CrowdSim(gym.Env):
 
         arrow_patch.set_animated(True)
         ax.add_artist(arrow_patch)
-        artists.add(arrow_patch)
+        ordered_artists.append(arrow_patch)
 
         # draw FOV for the robot
         # add robot FOV
@@ -1297,11 +1323,11 @@ class CrowdSim(gym.Env):
 
             FOVLine1.set_animated(True)
             ax.add_artist(FOVLine1)
-            artists.add(FOVLine1)
+            unordered_artists.add(FOVLine1)
 
             FOVLine2.set_animated(True)
             ax.add_artist(FOVLine2)
-            artists.add(FOVLine2)
+            unordered_artists.add(FOVLine2)
 
         ###### END DRAWING ROBOT ######
         ###### START DRAWING HUMANS ######
@@ -1341,7 +1367,7 @@ class CrowdSim(gym.Env):
                 human_speed_text.set_animated(True)
 
                 ax.add_artist(human_speed_text)
-                artists.add(human_speed_text)
+                unordered_artists.add(human_speed_text)
             else:
                 arrow_patch.set_animated(False)
                 human_circle.set_animated(False)
@@ -1353,25 +1379,17 @@ class CrowdSim(gym.Env):
                 human_circle.set_color(c="r")
 
             ax.add_artist(arrow_patch)
-            artists.add(arrow_patch)
+            unordered_artists.add(arrow_patch)
 
             ax.add_artist(human_circle)
-            artists.add(human_circle)
-
-        # DRAW BOX
-        walls_coords = self.world_box._rect.exterior.coords
-        walls = patches.Polygon(xy=walls_coords, fill=False)
-        ax.add_artist(walls)
-        artists.add(walls)
-        if self.lidar_end_pts is not None:
-            lidar = patches.Polygon(xy=self.lidar_end_pts, fill=False)
-            ax.add_artist(lidar)
-            artists.add(lidar)
+            unordered_artists.add(human_circle)
 
         ###### END DRAWING HUMANS ######
-        # could we speed up further by removing this loop?
-        for art in artists:
+
+        for art in unordered_artists:
             self.render_axis.draw_artist(art)
+        for other_art in ordered_artists:
+            self.render_axis.draw_artist(other_art)
 
         # copy the image to the GUI state, but screen might not be changed yet
         self.render_figure.canvas.blit(self.render_figure.bbox)

@@ -1,3 +1,4 @@
+# %%
 import time
 from typing import List, Tuple
 
@@ -6,25 +7,18 @@ import numpy as np
 from crowd_sim.envs.utils.get_intersect import get_intersect
 from crowd_sim.envs.utils.helper import vec_norm
 
-# import numba as nb
-# from numba import extending, jit, njit
 
-# TODO: make OOP
 def rescale_angle(theta):
     """Rescale values from np.arctan2 output [np.pi,-np.pi] to [0,2*np.pi]"""
     return (theta + 2 * np.pi) % (2 * np.pi)
 
 
-def get_valid_angles(
-    sensor_pos: List[float], sensor_heading: float, agent_xyr: np.ndarray
-) -> np.ndarray:
-    """Get valid angles relative to SENSOR FRAME
+def get_valid_angles(sensor_pos: List[float], agent_xyr: np.ndarray) -> np.ndarray:
+    """Get valid angles
     NOTE: this makes the LiDAR implementation much faster since it only checks relevant polygons
 
     :param sensor_pos: [x,y] sensor position in WORLD FRAME
     :type sensor_pos: List[float]
-    :param sensor_heading: sensor heading in [0,2*np.pi]
-    :type sensor_heading: float
     :param agent_xyr: agent attributes, format: [x,y,radius]
     :type agent_xyr: np.ndarray
     :return: min/max angles for each agent obstacle for LiDAR \
@@ -33,66 +27,77 @@ def get_valid_angles(
     """
 
     # center RELATIVE TO SENSOR FRAME
-    cx = agent_xyr[:, 0] - sensor_pos[0]
-    cy = agent_xyr[:, 1] - sensor_pos[1]
+    rel_x = agent_xyr[:, 0] - sensor_pos[0]
+    rel_y = agent_xyr[:, 1] - sensor_pos[1]
 
     # scale to [0,2pi]
-    heading = rescale_angle(np.arctan2(cy, cx))
+    heading = rescale_angle(np.arctan2(rel_y, rel_x))
     # determine min/max angles for lidar to hit obstacle
     dx = agent_xyr[:, 2] * np.sin(heading)
     dy = agent_xyr[:, 2] * np.cos(heading)
-    ax = cx + dx
-    ay = cy - dy
-    bx = cx - dx
-    by = cy + dy
+    ax = rel_x + dx
+    ay = rel_y - dy
+    bx = rel_x - dx
+    by = rel_y + dy
+
     # unsorted array
-    minmax_arr = np.empty((2, agent_xyr.shape[0]))
+    minmax_arr = np.zeros((2, agent_xyr.shape[0]))
     # NOTE: it is crucial to adjust angle here according to sensor heading for min/max angle values
-    minmax_arr[0, :] = rescale_angle(np.arctan2(ay, ax) - sensor_heading)
-    minmax_arr[1, :] = rescale_angle(np.arctan2(by, bx) - sensor_heading)
+    minmax_arr[0, :] = rescale_angle(np.arctan2(ay, ax))
+    minmax_arr[1, :] = rescale_angle(np.arctan2(by, bx))
 
     # preserve order by changing (2,n_agents) -> (n_agents,2)
     # sort each row so min = index 0, max = index 1
     return np.sort(minmax_arr, axis=0).T
 
 
-def rotate(arr: np.ndarray, theta: float) -> np.ndarray:
-    """Perform 2D rotation about the ORIGIN
+def get_valid_angle_idx(
+    test_theta: float, test_range: np.array, use_radians: bool = True
+):
+    """Test a SINGLE angle is within specified min/max valid angles"""
+    n_tests = test_range.shape[0]
+    div = 2 * np.pi if use_radians else 360
+
+    # preprocess, andle cases where obstacle occupies range at 0 deg
+    lower = test_range[:, 0]
+    upper = test_range[:, 1]
+    # transform test theta to np array
+    test_theta = np.ones(n_tests) * test_theta
+    idx = np.where(upper - lower >= np.pi)
+    upper[idx] -= 2 * np.pi
+    test_theta[idx] -= 2 * np.pi
+    # swap "lower" and "upper" to make sure lower < upper
+    lower[idx], upper[idx] = upper[idx], lower[idx]
+
+    res = (test_theta - lower) % div < (upper - lower) % div
+    return res
+
+
+def rotate(arr: np.ndarray, theta: float, ref_pt: Tuple[float] = [0, 0]) -> np.ndarray:
+    """Perform 2D rotation about a reference point
 
     :param arr: array of xy points, shape=(2, n_pts)
     :type arr: np.ndarray
     :param theta: Rotation angle in radians
     :type theta: float
+    :param ref_pt: xy-coordinate of reference frame, defaults to [0, 0]
+    :type ref_pt: Tuple[float], optional
+    :raises NotImplementedError: Not suitable for 3D tensors
     :return: Rotated line
     :rtype: np.ndarray
     """
-    # rot matrix, shape = (2,2)
+
     c, s = np.cos(theta), np.sin(theta)
+    rot_arr = np.zeros_like(arr)
     if arr.ndim == 2:
-        rot = np.array([[c, -s], [s, c]]).astype(np.float64)
-        # do matrix multiplication, inner dims have to match
-        assert rot.shape[1] == arr.shape[0]
-        return rot @ arr
+        dx = arr[0, :] - ref_pt[0]
+        dy = arr[1, :] - ref_pt[1]
+        rot_arr[0, :] = c * dx - s * dy + ref_pt[0]
+        rot_arr[1, :] = s * dx + c * dy + ref_pt[1]
+        return rot_arr
     # preprocessing if vectorized
     elif arr.ndim == 3:
-        # n_beams, n_xy, n_pts = arr.shape[0], arr.shape[1], arr.shape[2]
-        # # assume arr format=(n_beams, 2, n_pts per beam)
-        # # (n_beams, 2, n_pts) -> (2, n_beams, n_pts) -> (2, n_beams * n_pts)
-        # arr = arr.transpose(1, 0, 2).reshape(n_xy, -1)
-        # # TODO: remove essentially flatten from axis = 1 onwards
-        # # TODO: remove arr = arr.reshape(arr.shape[0], -1)
-
-        # result = np.empty_like(arr)
-        # x, y = arr[0, :], arr[1, :]
-        # # TODO: vary rotation angle
-        # result[0, :] = c * x - s * y
-        # result[1, :] = s * x + c * y
-
-        # # go backwards to preserve order
-        # result = result.reshape(result.shape[0], n_beams, n_pts)
-        # result = result.transpose(1, 0, 2)
-        # return result
-        raise NotImplementedError("Bruh")
+        raise NotImplementedError
 
 
 def unsqueeze(arr: np.ndarray, dim: int) -> np.ndarray:
@@ -103,7 +108,7 @@ def unsqueeze(arr: np.ndarray, dim: int) -> np.ndarray:
 def create_agents_arr(agent_xyr: np.ndarray, n_pts: int) -> np.ndarray:
     """Create all agent points in the WORLD FRAME
 
-    :param agent_xyr: All agent obstacle attributes, shape=(n_agents, 3)
+    :param agent_xyr: All agent obstacle attributes, ASSUMED to be in WORLD FRAME, shape=(n_agents, 3)
     :type agent_xyr: np.ndarray
     :param n_pts: number of points to represent agent obstacle polygon
     :type n_pts: int
@@ -114,14 +119,14 @@ def create_agents_arr(agent_xyr: np.ndarray, n_pts: int) -> np.ndarray:
     poly_angles = np.linspace(0, 2 * np.pi, n_pts)
     # (n_agents,) -> (n_agents,1)
     radii = unsqueeze(agent_xyr[:, 2], dim=1)
-    px = unsqueeze(agent_xyr[:, 0], dim=1)
-    py = unsqueeze(agent_xyr[:, 1], dim=1)
+    world_x = unsqueeze(agent_xyr[:, 0], dim=1)
+    world_y = unsqueeze(agent_xyr[:, 1], dim=1)
 
     # (n_agents,2,n_pts)
-    agent_arr = np.empty((agent_xyr.shape[0], 2, n_pts))
+    agent_arr = np.zeros((agent_xyr.shape[0], 2, n_pts))
     # broadcasting, position in WORLD FRAME
-    agent_arr[:, 0] = px + radii * np.cos(poly_angles)
-    agent_arr[:, 1] = py + radii * np.sin(poly_angles)
+    agent_arr[:, 0] = world_x + radii * np.cos(poly_angles)
+    agent_arr[:, 1] = world_y + radii * np.sin(poly_angles)
     return agent_arr
 
 
@@ -153,8 +158,9 @@ def create_lidarbeam_arr(
 
     # if set, this determines how accurate your measurements are
     if resolution is not None:
-        # override n_pts to achieve resolution
-        n_pts = int(max_range / resolution) + 1
+        # override n_pts to achieve xy_resolution
+        n_pts = max_range / resolution
+        n_pts = int(n_pts) + 1 if n_pts % 1 != 0 else int(n_pts)
 
     # points depend on resolution of line (lidar beam)
     single_beam = np.zeros((2, n_pts))
@@ -166,13 +172,13 @@ def create_lidarbeam_arr(
     # (n_beams, 2, n_pts)
     rot_beams = np.repeat(single_beam, n_beams, axis=0)
     lidar_angles = np.linspace(0, 2 * np.pi, n_beams)
-    # all_beams = np.repeat(single_beam, cfg["num_spacings"], axis=0)
-    # lidar_angles = np.linspace(0, 2 * np.pi, cfg["num_spacings"])
+    # rotate according to sensor
+    lidar_angles = rescale_angle(lidar_angles + sensor_heading)
 
     # TODO: vectorize
     # rotate each beam to the correct angle
     for i in range(rot_beams.shape[0]):
-        rot_beams[i] = rotate(rot_beams[i], lidar_angles[i] + sensor_heading)
+        rot_beams[i] = rotate(rot_beams[i], lidar_angles[i], ref_pt=[0, 0])
 
     # translate x and y components
     rot_beams[:, 0, :] += sensor_pos[0]
@@ -180,12 +186,12 @@ def create_lidarbeam_arr(
     return rot_beams, lidar_angles
 
 
-def check_collision_polygon(
+def check_dist_collision_polygon(
     sensor_pos: List[float],
     beam_pts: np.ndarray,
     obst_xyr: np.ndarray,
 ) -> Tuple[float]:
-    """Check if a SINGLE beam collides with selected obstacles, in the world frame
+    """Check if a SINGLE beam collides with selected obstacles, in the WORLD FRAME
 
     :param sensor_pos: LiDAR sensor xy position
     :type sensor_pos: List[float]
@@ -199,40 +205,37 @@ def check_collision_polygon(
 
     center, radius = obst_xyr[:, 0:2], obst_xyr[:, 2]
     # determine closest point to sensor if multiple points
+    sensor_pos = np.array(sensor_pos)
     rel_distances = np.linalg.norm(center - sensor_pos, axis=1)
     # select closest obstacle center
     center_idx = np.argmin(rel_distances)
-
     # select appropriate obstacle
     center = center[center_idx, :]
     radius = radius[center_idx]
 
-    # point where lidar beam ends
-    end_pt = np.empty((2, 1))
     # traverse along lidar beam
     # NOTE: DO NOT translate with sensor pos since beam is already in world frame
+
     dx = (center[0] - beam_pts[0, :]) ** 2
     dy = (center[1] - beam_pts[1, :]) ** 2
     res = np.sqrt(dx + dy)
 
     # values that are all valid collisions, returns a (1,tuple(..))
-    val_idx = np.where(res <= radius)
-    # TODO: use this for speed
-    # idx = np.searchsorted(res, radius)
+    val_idx = np.where(res < radius)
 
     if len(val_idx[0]) > 0:
         # grab closest point to sensor, this handles occlusion
         end_idx = val_idx[0].min()
-        end_pt = beam_pts[:, end_idx]
-
-    return end_pt
+        end_pt = beam_pts[:, end_idx].squeeze()
+        return end_pt
+    else:
+        return None
 
 
 def process_obstacles(
     cfg: dict,
     sensor_pos: List[float],
     beam_arr: np.ndarray,
-    obst_arr: np.ndarray,
     obst_xyr: np.ndarray,
     lidar_angles: np.ndarray,
     valid_angles: np.ndarray,
@@ -246,8 +249,6 @@ def process_obstacles(
     :type sensor_pos: List[float]
     :param beam_arr: All LiDAR beams, shape=(n_beams,2, n_pts per beam)
     :type beam_arr: np.ndarray
-    :param obst_arr: All dynamic obstacles (i.e. agents), shape=(n_obst, 2, n_pts per obst)
-    :type obst_arr: np.ndarray
     :param obst_xyr: All corresponding obstacle attributes for obst_arr, where first dimension is aligned
     :type obst_xyr: np.ndarray
     :param lidar_angles: All LiDAR angles
@@ -259,60 +260,50 @@ def process_obstacles(
     :return: xy position where each beam ends in world frame, shape=(n_beams,2)
     :rtype: np.ndarray
     """
-
-    lidar_end_pts = np.empty(beam_arr.shape[0:2])
+    assert "max_range" in cfg.keys()
+    lidar_end_pts = np.zeros((beam_arr.shape[0], 2))
 
     # TODO: vectorize
-    # loop through all beams
     for i in range(beam_arr.shape[0]):
-        # check that lidar angles are within valid max/min angles before checking collision points
-        # index (0,1) correspond to (min,max) valid angles
-        min_cond = lidar_angles[i] >= valid_angles[:, 0]
-        max_cond = lidar_angles[i] <= valid_angles[:, 1]
-        valid_indices = np.bitwise_and(min_cond, max_cond)
-        # for each valid obstacle check for collision pt
-        valid_obst = obst_arr[valid_indices]
-        valid_obst_attr = obst_xyr[valid_indices]
-
         beam_xy = beam_arr[i, :, :]
         beam_start = beam_arr[i, :, 0]  # at sensor pos
         beam_end = beam_arr[i, :, -1]  # @ max sensor range
 
-        # by default set to max range of lidar
         end_pt = beam_end
-        alt_end_pt = None
-        # if collisions among DYNAMIC OBSTACLES detected
-        if valid_obst.size > 0:
-            # determine the end point based on the beam
-            # dist_check = np.vstack((valid_obst.min(), valid_obst.max()))
-            # dist_check = np.linalg.norm(dist_check, axis=1)
-            # dynamic_available = (dist_check <= cfg["max_range"]).any()
-            end_pt = check_collision_polygon(
-                sensor_pos, beam_xy, valid_obst_attr
-            ).squeeze()
 
         # ensure wrap around
         if wall_pts[-1] != wall_pts[0]:
             wall_pts.append(wall_pts[0])
 
-        # check for collisions with wall
-        for j in range(len(wall_pts) - 1):
-            # check for intersection with walls
-            intersect_pt = get_intersect(
-                beam_start, beam_end, wall_pts[j], wall_pts[j + 1]
+        valid_angle_idx = get_valid_angle_idx(lidar_angles[i], valid_angles)
+        # passed angle check, but might still fail distance checks
+        alt_tmp_pt = None
+        if valid_angle_idx.astype(np.int).sum() > 0:
+            valid_obst_xyr = obst_xyr[valid_angle_idx]
+            alt_tmp_pt = check_dist_collision_polygon(
+                sensor_pos, beam_xy, valid_obst_xyr
             )
-            # each lidar beam only intersects with single wall
-            if intersect_pt is not None:
-                alt_end_pt = intersect_pt
-                break
 
-        # if vec_norm(end_pt, sensor_pos) > cfg["max_range"]:
-        #     end_pt = beam_end
+        # if failed distance check, return val = None
+        if alt_tmp_pt is not None:
+            end_pt = alt_tmp_pt
+        else:
+            # check for collisions with wall
+            tmp_pt = None
+            for j in range(len(wall_pts) - 1):
+                # check for intersection with walls
+                intersect_pt = get_intersect(
+                    beam_start, beam_end, wall_pts[j], wall_pts[j + 1]
+                )
+                # each lidar beam only intersects with single wall (single line)
+                if intersect_pt is not None:
+                    tmp_pt = intersect_pt
+                    break
 
-        if alt_end_pt is not None:
-            # grab closer collision point
-            if vec_norm(alt_end_pt, sensor_pos) < vec_norm(end_pt, sensor_pos):
-                end_pt = alt_end_pt
+            if tmp_pt is not None:
+                if vec_norm(tmp_pt, sensor_pos) <= cfg["max_range"]:
+                    end_pt = tmp_pt
+
         # store result
         lidar_end_pts[i] = end_pt
 
@@ -329,6 +320,9 @@ class LidarSensor:
     - call lidar_spin() to get points
     """
 
+    N_PTS_POLY = 100
+    BEAM_RESOLUTION = 0.01
+
     def __init__(self, cfg: dict):
         self.cfg = cfg
         self.sensor_pos = [0, 0]  # sensor location
@@ -342,7 +336,7 @@ class LidarSensor:
 
         # static obstacles
         self.wall_pts = None  # (n_vertices, 2) of x,y points
-        self.viz = {"valid_angles": None, "global_end_pts": None}
+        self.viz = {}  # dict to store info
 
     def parse_obstacles(self, obst_pts, mode=""):
         """If mode == 'agents', type(obst_pts) should be np.ndarray, otherwise if mode == 'walls', type(obst_pts) should be list"""
@@ -350,7 +344,8 @@ class LidarSensor:
             if type(obst_pts) == list:
                 obst_pts = np.array(obst_pts)
             assert type(obst_pts) is np.ndarray
-            self.agent_arr = create_agents_arr(obst_pts, n_pts=45)
+            assert obst_pts.shape[1] == 3
+            self.agent_arr = create_agents_arr(obst_pts, n_pts=self.N_PTS_POLY)
             self.agent_attrs = obst_pts
 
         elif mode == "walls":
@@ -360,34 +355,27 @@ class LidarSensor:
                 obst_pts.append(obst_pts[0])
             self.wall_pts = obst_pts
 
-    # TODO: update existing arrays based on d_xy, d_heading to maybe make it faster
     def update_sensor(self, xy=None, heading=None):
         if xy is not None:
             self.sensor_pos = xy
-
         if heading is not None:
             self.sensor_heading = heading
 
     def sensor_spin(self, normalize=True) -> Tuple[np.ndarray]:
-        beams_arr, lidar_angles = create_lidarbeam_arr(
+        beams_arr, rot_lidar_angles = create_lidarbeam_arr(
             self.sensor_pos,
             self.sensor_heading,
             self.cfg["max_range"],
-            self.cfg["num_spacings"],
+            self.cfg["num_beams"],
             resolution=0.01,
         )
-        valid_angles = get_valid_angles(
-            self.sensor_pos, self.sensor_heading, self.agent_attrs
-        )
-
-        # end points in WORLD FRAME
+        valid_angles = get_valid_angles(self.sensor_pos, self.agent_attrs)
         lidar_end_pts = process_obstacles(
             self.cfg,
             self.sensor_pos,
             beams_arr,
-            self.agent_arr,
             self.agent_attrs,
-            lidar_angles,
+            rot_lidar_angles,
             valid_angles,
             self.wall_pts,
         )
@@ -395,65 +383,70 @@ class LidarSensor:
         rel_end_pts = lidar_end_pts - self.sensor_pos
         rel_dist = np.linalg.norm(rel_end_pts, axis=1)
 
-        self.viz["valid_angles"] = valid_angles
-        self.viz["global_end_pts"] = lidar_end_pts
-        self.viz["relative_end_pts"] = rel_end_pts
-
         # minmax scale to 0-1 based on max sensor range
         if normalize:
             rel_dist = (rel_dist - rel_dist.min()) / (
                 self.cfg["max_range"] - rel_dist.min()
             )
 
-        return lidar_angles, rel_dist
+        # adjust back to world frame
+        Fw_lidar_angles = rot_lidar_angles - self.sensor_heading
 
-    def get_viz_pts(self, key):
-        if key not in self.viz.keys():
-            return None
-        else:
-            if key == "global_end_pts":
-                return self.viz["global_end_pts"]
+        return Fw_lidar_angles, rel_dist, lidar_end_pts
 
 
 if __name__ == "__main__":
     # format: (x,y, radius)
-    agent_xyr = [
-        (1, 1, 0.5),
-        (2, 2, 0.5),
-        (-4, -3, 0.5),
-        (-3, -3, 0.3),
-        (-3, -4, 0.2),
-        (-0.5, 0.5, 0.4),
-        (5, -5, 0.3),
-    ]
-    agent_xyr = np.array(agent_xyr)
-    cfg = {"max_range": 11, "num_spacings": 180}
-    n_beams = cfg["num_spacings"]
-    max_range = cfg["max_range"]
+
     t = 20 / 2
     wall_pts = [(-t, -t), (t, -t), (t, t), (-t, t)]
+    cfg = {"max_range": 11, "num_beams": 180}
+
+    sensor = LidarSensor(cfg)
+
+    # DEFINE
+    sensor_pos = (1, 1)
+    sensor_heading = np.pi / 4
+    n_agents = 5
+
     n_iter = 1e2
     start = time.time()
-    sensor_pos = [0, 0]
-    sensor_heading = 0
 
     for i in range(int(n_iter)):
-        agents = create_agents_arr(agent_xyr, n_pts=100)
-        beams, angles = create_lidarbeam_arr(
-            sensor_pos, sensor_heading, max_range, n_beams, n_pts=300
+        agent_xyr = [
+            (2, 2, 0.5),
+            (-4, -3, 0.5),
+            (-3, -3, 0.3),
+            (-3, -4, 0.2),
+            (-0.5, 0.5, 0.4),
+            (5, -5, 0.3),
+        ]
+        agent_xyr = np.array(agent_xyr)
+        agent_arr = create_agents_arr(agent_xyr, n_pts=100)
+        beam_arr, rot_angles = create_lidarbeam_arr(
+            sensor_pos,
+            sensor_heading,
+            cfg["max_range"],
+            cfg["num_beams"],
+            resolution=0.01,
         )
-        valid_theta = get_valid_angles(sensor_pos, sensor_heading, agent_xyr)
+        valid_theta = get_valid_angles(sensor_pos, agent_xyr)
         retval = process_obstacles(
-            cfg, sensor_pos, beams, agents, agent_xyr, angles, valid_theta, wall_pts
+            cfg,
+            sensor_pos,
+            beam_arr,
+            agent_xyr,
+            rot_angles,
+            valid_theta,
+            wall_pts,
         )
         rel_end_pts = retval - sensor_pos
         rel_dist = np.linalg.norm(rel_end_pts, axis=1)
         rel_dist = (rel_dist - rel_dist.min()) / (cfg["max_range"] - rel_dist.min())
-
     elapsed = time.time() - start
     print(f"{n_iter} iterations took {elapsed:.6f} seconds")
 
-    # # DEBUGGING
+    # DEBUGGING
     fig, ax = plt.subplots(figsize=(7, 7))
     val = 20 / 2 + 5
     ax.set_xlim(-val, val)
@@ -462,42 +455,61 @@ if __name__ == "__main__":
     ax.set_ylabel("y(m)", fontsize=16)
 
     # plot lidar beams
-    x_pts = beams[:, 0, :].flatten()
-    y_pts = beams[:, 1, :].flatten()
+    x_pts = beam_arr[:, 0, :].flatten()
+    y_pts = beam_arr[:, 1, :].flatten()
     ax.plot(x_pts, y_pts, color="r", alpha=0.1)
 
-    # # plot end points
-    end_x = retval[:, 0]
-    end_y = retval[:, 1]
-
+    # plot end points
+    end_x, end_y = retval[:, 0], retval[:, 1]
     ax.scatter(end_x, end_y, marker="h", color="k", s=0.5)
-    ax.scatter(end_x[0], end_y[0], marker="h", color="r", s=6)
-
-    sensor = plt.Circle(sensor_pos, radius=0.3, color="g")
+    ax.scatter(end_x[0], end_y[0], marker="h", color="r", s=10)
+    sensor = plt.Circle(sensor_pos, radius=0.25, color="g")
     ax.add_patch(sensor)
+
     colors = ["b", "g", "r", "c", "m", "y", "k"]
-    for i in range(agents.shape[0]):
-        # plot agent polygons
-        agent_x = agents[i, 0, :].flatten()
-        agent_y = agents[i, 1, :].flatten()
-        ax.scatter(agent_x, agent_y, color=colors[i], s=0.01)
+    for i in range(agent_arr.shape[0]):
+        ax.scatter(
+            agent_arr[i, 0, :].flatten(),
+            agent_arr[i, 1, :].flatten(),
+            color=colors[i],
+            s=0.01,
+        )
 
+        # # show spatial data for each obstacle
+        tmp_line = np.zeros((2, 30))
+        dist = np.linalg.norm(agent_xyr[i, :2] - sensor_pos)
+        tmp_line[0, :] = np.linspace(0, dist, 30)
+        tmp_line[1, :] = np.linspace(0, 0, 30)
+        min_line = rotate(tmp_line, valid_theta[i, 0])
+        max_line = rotate(tmp_line, valid_theta[i, 1])
+        min_line += unsqueeze(sensor_pos, dim=1)
+        max_line += unsqueeze(sensor_pos, dim=1)
+
+        ax.scatter(min_line[0, :], min_line[1, :], alpha=0.5, color=colors[i], s=0.1)
+        ax.scatter(max_line[0, :], max_line[1, :], color=colors[i], s=0.1)
+
+    range_str = f"Max Sensor Range = {int(cfg['max_range'])}m"
+    ax.annotate(
+        range_str,
+        xy=(210, 25),
+        xycoords="axes points",
+        ha="left",
+        va="bottom",
+        bbox=dict(boxstyle="round", fc="w"),
+    )
     fig1, ax1 = plt.subplots()
-    ax1.plot(np.rad2deg(angles), rel_dist)
-    plt.show()
-    #     # show spatial data for each obstacle
-    #     tmp_line = np.empty((2, 30))
-    #     dist = np.linalg.norm(agent_xyr[i, :2])
-    #     tmp_line[0, :] = np.linspace(0, dist, 30)
-    #     tmp_line[1, :] = np.linspace(0, 0, 30)
-    #     min_line = rotate(tmp_line, valid_theta[i, 0])
-    #     max_line = rotate(tmp_line, valid_theta[i, 1])
-    #     min_line += unsqueeze(sensor_pos, dim=1)
-    #     max_line += unsqueeze(sensor_pos, dim=1)
-    #     ax.scatter(min_line[0, :], min_line[1, :], alpha=0.5, color=colors[i], s=0.1)
-    #     ax.scatter(max_line[0, :], max_line[1, :], color=colors[i], s=0.1)
-    # # for j in range(beams.shape[0]):
-    # #     # annotate lidar
-    # #     ax.text(end_x[j], end_y[j], str(j))
+    ax1.set_xlabel("Lidar Angles (degrees)")
+    ax1.set_ylabel("Normalized Distance")
+    ax1.plot(np.rad2deg(rescale_angle(rot_angles - sensor_heading)), rel_dist)
+    ax1.annotate(
+        range_str,
+        xy=(210, 75),
+        xycoords="axes points",
+        ha="left",
+        va="bottom",
+        bbox=dict(boxstyle="round", fc="w"),
+    )
 
-    # plt.show()
+    plt.show()
+
+# %%
