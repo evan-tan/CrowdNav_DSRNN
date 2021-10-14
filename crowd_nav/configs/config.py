@@ -27,9 +27,9 @@ class Config(object):
         "square_crossing",
         "parallel_traffic",
         "perpendicular_traffic",
-        "side_pref_passing",
-        "side_pref_overtaking",
-        "side_pref_crossing",
+        # "side_pref_passing",
+        # "side_pref_overtaking",
+        # "side_pref_crossing",
     ]
     sim.square_width = 20
 
@@ -40,9 +40,6 @@ class Config(object):
     sim.human_num = 5 if not test.side_preference else 1
     # Group environment: set to true; FoV environment: false
     sim.group_human = False
-
-    lidar = BaseConfig()
-    lidar.cfg = {"max_range": 5, "num_beams": 360}
 
     env = BaseConfig()
     env.env_name = "CrowdSimDict-v0"  # name of the environment
@@ -126,6 +123,12 @@ class Config(object):
     # uniform, gaussian
     noise.type = "uniform"
     noise.magnitude = 0.1
+
+    lidar = BaseConfig()
+    # set robot_radius = robot.radius BELOW
+    lidar.enable = False
+    lidar.viz = False
+    lidar.cfg = {"max_range": 5, "num_beams": 180, "robot_radius": robot.radius}
 
     action_space = BaseConfig()
     # holonomic or unicycle

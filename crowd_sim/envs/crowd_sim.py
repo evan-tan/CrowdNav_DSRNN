@@ -222,7 +222,10 @@ class CrowdSim(gym.Env):
         self.world_box = Rectangle(world_size, world_size)
         t = world_size / 2
         self.wall_pts = [(-t, -t), (t, -t), (t, t), (-t, t)]
-        self.lidar = LidarSensor(config.lidar.cfg)
+        if self.config.lidar.enable:
+            self.lidar = LidarSensor(config.lidar.cfg)
+        else:
+            self.lidar = None
         self.lidar_end_pts = None
         return
 
@@ -923,8 +926,9 @@ class CrowdSim(gym.Env):
 
             # SOCIAL METRIC 2
             human_VR = VelocityRectangle(human)
-            if self.robot_VR.intersects(human_VR):
-                vec_rect_violations += 1
+            if self.robot_VR is not None:
+                if self.robot_VR.intersects(human_VR):
+                    vec_rect_violations += 1
             # SOCIAL METRIC 3
             if not human.reached_destination():
                 aggregate_nav_time += 1
@@ -1204,7 +1208,7 @@ class CrowdSim(gym.Env):
         ###### START LIDAR DRAWING #####
         from crowd_sim.envs.utils.lidarv2 import rotate, unsqueeze
 
-        if self.lidar_end_pts is not None:
+        if self.lidar_end_pts is not None and self.config.lidar.viz:
             lidar_poly = patches.Polygon(self.lidar_end_pts, fill=False)
             ax.add_artist(lidar_poly)
             ordered_artists.append(lidar_poly)

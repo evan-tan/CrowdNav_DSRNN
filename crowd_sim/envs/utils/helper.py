@@ -7,6 +7,36 @@ import shapely.geometry
 from crowd_sim.envs.utils.agent import Agent
 
 
+def unsqueeze(arr: np.ndarray, dim: int) -> np.ndarray:
+    """Wrapper function for torch.unsqueeze() functionality in NumPy"""
+    return np.expand_dims(arr, axis=dim)
+
+
+def create_agents_arr(agent_xyr: np.ndarray, n_pts: int) -> np.ndarray:
+    """Create all agent points in the WORLD FRAME
+
+    :param agent_xyr: All agent obstacle attributes, ASSUMED to be in WORLD FRAME, shape=(n_agents, 3)
+    :type agent_xyr: np.ndarray
+    :param n_pts: number of points to represent agent obstacle polygon
+    :type n_pts: int
+    :return: Array of xy points for each agent polygon, shape=(n_agent,2, n_pts)
+    :rtype: np.ndarray
+    """
+    # points to represent polygon
+    poly_angles = np.linspace(0, 2 * np.pi, n_pts)
+    # (n_agents,) -> (n_agents,1)
+    radii = unsqueeze(agent_xyr[:, 2], dim=1)
+    world_x = unsqueeze(agent_xyr[:, 0], dim=1)
+    world_y = unsqueeze(agent_xyr[:, 1], dim=1)
+
+    # (n_agents,2,n_pts)
+    agent_arr = np.zeros((agent_xyr.shape[0], 2, n_pts))
+    # broadcasting, position in WORLD FRAME
+    agent_arr[:, 0] = world_x + radii * np.cos(poly_angles)
+    agent_arr[:, 1] = world_y + radii * np.sin(poly_angles)
+    return agent_arr
+
+
 def create_events_dict(config):
     """Create nested events dictionary to count terminal states for each different scenario from config.py
 
