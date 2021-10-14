@@ -16,6 +16,7 @@ from crowd_sim.envs.utils.helper import (
     NormZoneRectangle,
     Rectangle,
     VelocityRectangle,
+    check_inside_world,
     make_shapely_ellipse,
     rand_world_pt,
     vec_norm,
@@ -979,9 +980,10 @@ class CrowdSim(gym.Env):
         )
 
         robot_ellipse = make_shapely_ellipse(
-            self.robot.radius, self.robot.get_goal_position()
+            self.robot.radius, self.robot.get_position()
         )
-        inside_world = True if robot_ellipse.intersects(self.world_box._rect) else False
+        # use this boolean to check if robot is inside world
+        inside_world = check_inside_world(robot_ellipse, self.wall_pts)
 
         # SOCIAL METRIC 5
         speed = (action.vx ** 2 + action.vy ** 2) ** 0.5

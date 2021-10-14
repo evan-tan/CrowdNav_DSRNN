@@ -5,6 +5,7 @@ import matplotlib.lines as mlines
 import numpy as np
 import shapely.geometry
 from crowd_sim.envs.utils.agent import Agent
+from shapely.geometry import LineString
 
 
 def unsqueeze(arr: np.ndarray, dim: int) -> np.ndarray:
@@ -35,6 +36,22 @@ def create_agents_arr(agent_xyr: np.ndarray, n_pts: int) -> np.ndarray:
     agent_arr[:, 0] = world_x + radii * np.cos(poly_angles)
     agent_arr[:, 1] = world_y + radii * np.sin(poly_angles)
     return agent_arr
+
+
+def check_inside_world(agent_ellipse, wall_pts):
+    """Very jank and only used to check if robot is inside world"""
+    if wall_pts[-1] != wall_pts[0]:
+        wall_pts.append(wall_pts[0])
+    # decompose wall boundaries i.e. polygon, into line strings
+    is_inside = True
+    for i in range(len(wall_pts) - 1):
+        line = LineString([wall_pts[i], wall_pts[i + 1]])
+        is_intersecting = line.intersection(agent_ellipse)
+        if not is_intersecting.is_empty:
+            is_inside = False
+            break
+
+    return is_inside
 
 
 def create_events_dict(config):
