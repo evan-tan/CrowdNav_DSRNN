@@ -236,7 +236,7 @@ class NormZoneRectangle(Rectangle):
     LENGTH_SCALE = 1
     WIDTH_SCALE = 1
 
-    def __init__(self, agent: Agent, side="", norm="rhs"):
+    def __init__(self, agent: Agent, side="", norm="lhs"):
         self._agent = agent
         assert agent is not None
         assert "left" in side or "right" in side

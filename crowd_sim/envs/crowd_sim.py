@@ -889,14 +889,15 @@ class CrowdSim(gym.Env):
         collision = False
         step_info = dict()
         self.robot_VR = VelocityRectangle(self.robot)
-        self.left_NZ = NormZoneRectangle(self.robot, "left")
-        self.right_NZ = NormZoneRectangle(self.robot, "right")
-        if self.max_dist_NZ is None:
-            distances = []
-            for idx, zone in enumerate([self.left_NZ, self.right_NZ]):
-                for point in zone._rect.exterior.coords:
-                    distances.append(vec_norm([self.robot.px, self.robot.py], point))
-            self.max_dist_NZ = max(distances)
+        if self.config.reward.norm_zones:
+            self.left_NZ = NormZoneRectangle(self.robot, "left")
+            self.right_NZ = NormZoneRectangle(self.robot, "right")
+            if self.max_dist_NZ is None:
+                distances = []
+                for idx, zone in enumerate([self.left_NZ, self.right_NZ]):
+                    for point in zone._rect.exterior.coords:
+                        distances.append(vec_norm([self.robot.px, self.robot.py], point))
+                self.max_dist_NZ = max(distances)
 
         vec_rect_violations = 0  # social zone violations
         aggregate_nav_time = 0
@@ -919,11 +920,12 @@ class CrowdSim(gym.Env):
 
             human_pos = human.get_position()
             # check if norm zones violated
-            if vec_norm(human_pos, robot_pos) <= self.max_dist_NZ:
-                h_ellipse = make_shapely_ellipse(human.radius, human_pos)
-                for zone in [self.left_NZ, self.right_NZ]:
-                    if h_ellipse.intersects(zone._rect):
-                        norm_zone_violated = True
+            if self.config.reward.norm_zones:
+                if vec_norm(human_pos, robot_pos) <= self.max_dist_NZ:
+                    h_ellipse = make_shapely_ellipse(human.radius, human_pos)
+                    for zone in [self.left_NZ, self.right_NZ]:
+                        if h_ellipse.intersects(zone._rect):
+                            norm_zone_violated = True
 
             # SOCIAL METRIC 2
             human_VR = VelocityRectangle(human)
