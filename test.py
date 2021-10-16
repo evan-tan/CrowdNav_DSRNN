@@ -113,9 +113,6 @@ def main():
     if test_args.test_name:
         f_name += "test_" + test_args.test_name + "#"
 
-    if test_args.visualize:
-        f_name += "visual"
-
     f_name += ".log"
     # replace arbitrary placeholder
     f_name = f_name.replace("#", "_")
