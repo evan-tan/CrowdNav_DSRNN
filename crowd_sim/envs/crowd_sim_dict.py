@@ -96,7 +96,18 @@ class CrowdSimDict(CrowdSim):
         # select scenario from set, with equal probability
         set_scenarios = self.scenarios[self.phase]
         scenario_weights = [1 / len(set_scenarios)] * len(set_scenarios)
-        self.current_scenario = random.choices(set_scenarios, scenario_weights)[0]
+        if self.config.test.social_metrics:
+            # enforce sequentially selecting scenarios
+            assert len(set_scenarios) == 4
+            if self.scenario_counter <= 3:
+                index = self.scenario_counter
+            else:
+                # ensure wrap around to index [0,..,3] from set_scenarios
+                index = int(self.scenario_counter % 4)
+            self.current_scenario = set_scenarios[index]
+        else:
+            # random selection
+            self.current_scenario = random.choices(set_scenarios, scenario_weights)[0]
 
         if self.phase is not None:
             phase = self.phase
@@ -168,6 +179,9 @@ class CrowdSimDict(CrowdSim):
             )
         )
 
+        self.scenario_counter += 1
+        self.robot_history.clear()
+
         return ob
 
     def step(self, action, update=True):
@@ -190,12 +204,17 @@ class CrowdSimDict(CrowdSim):
         reward, done, episode_info = self.calc_reward(action)
 
         human_xyr = []
+        # heading = []
         # apply action and update all agents
         self.robot.step(action)
         for i, human_action in enumerate(human_actions):
             self.humans[i].step(human_action)
             state = self.humans[i].get_observable_state_list()
             human_xyr.append([state[0], state[1], state[-1]])
+            # vx, vy = state[2:4]
+            # heading.append(np.arctan2(vy, vx))
+        # calculate agent headings
+        # heading = np.array(heading)
 
         # parse all obstacles and walls
         if self.lidar is not None:
