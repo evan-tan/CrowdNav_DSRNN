@@ -1,5 +1,6 @@
 import logging
 import random
+from collections import deque
 
 import gym
 import matplotlib.legend as legend
@@ -9,7 +10,7 @@ import matplotlib.text as mtext
 import numpy as np
 from crowd_nav.policy.orca import ORCA
 from crowd_nav.policy.policy_factory import policy_factory
-from matplotlib import patches
+from matplotlib import cm, patches
 from numpy.linalg import norm
 
 from crowd_sim.envs.utils.helper import (
@@ -46,7 +47,7 @@ class CrowdSim(gym.Env):
         # reward function
         self.success_reward = None
         self.collision_penalty = None
-        self.discomfort_dist = None
+        self.discomfort_dist_back = None
         self.discomfort_dist_front = None
         self.discomfort_penalty_factor = None
         # simulation configuration
@@ -98,7 +99,7 @@ class CrowdSim(gym.Env):
 
         self.success_reward = config.reward.success_reward
         self.collision_penalty = config.reward.collision_penalty
-        self.discomfort_dist = config.reward.discomfort_dist_back
+        self.discomfort_dist_back = config.reward.discomfort_dist_back
         self.discomfort_dist_front = config.reward.discomfort_dist_front
         self.discomfort_penalty_factor = config.reward.discomfort_penalty_factor
 
@@ -118,7 +119,10 @@ class CrowdSim(gym.Env):
             }
             self.circle_radius = config.sim.circle_radius
             self.human_num = config.sim.human_num
-            self.group_human = config.sim.group_human
+            # ensure group humans are disabled if testing side pref
+            self.group_human = (
+                config.sim.group_human if not config.test.side_preference else False
+            )
 
         else:
             raise NotImplementedError
@@ -130,6 +134,7 @@ class CrowdSim(gym.Env):
             "train": config.sim.train_val_sim,
             "test": config.sim.test_sim,
         }
+        self.scenario_counter = 0
         for _, val in self.scenarios.items():
             if type(val) is str:
                 raise TypeError(
@@ -228,6 +233,13 @@ class CrowdSim(gym.Env):
         else:
             self.lidar = None
         self.lidar_end_pts = None
+
+        # plotting
+        self.circle_alpha = 0
+        self.robot_history = deque(
+            maxlen=int((self.config.env.time_limit - 1) / self.config.env.time_step)
+        )
+
         return
 
     def set_robot(self, robot):
@@ -263,7 +275,7 @@ class CrowdSim(gym.Env):
                 py = self.circle_radius * np.sin(angle) + py_noise
                 collide = False
                 for agent in [self.robot] + self.humans:
-                    min_dist = human.radius + agent.radius + self.discomfort_dist
+                    min_dist = human.radius + agent.radius + self.discomfort_dist_back
                     if (
                         norm((px - agent.px, py - agent.py)) < min_dist
                         or norm((px - agent.gx, py - agent.gy)) < min_dist
@@ -285,20 +297,20 @@ class CrowdSim(gym.Env):
         py_noise = (np.random.random() - 0.5) * v_pref
         heading = 0
 
-        if "circle_crossing" in scenario:
+        if "circle_crossing" == scenario:
             angle = np.random.random() * np.pi * 2
             px = self.circle_radius * np.cos(angle) + px_noise
             py = self.circle_radius * np.sin(angle) + py_noise
             gx = -px
             gy = -py
-        elif "square_crossing" in scenario:
+        elif "square_crossing" == scenario:
             # rand_world_pt generates random point in (-10,10)
             # based on config.sim.square_width
             px = rand_world_pt(self.config) * 0.4 + px_noise
             py = rand_world_pt(self.config) * 0.4 + py_noise
             gx = rand_world_pt(self.config) * 0.4 + px_noise
             gy = rand_world_pt(self.config) * 0.4 + py_noise
-        elif "parallel_traffic" in scenario:
+        elif "parallel_traffic" == scenario:
             # whether or not to flip sides
             sign = 1 if np.random.random() >= 0.5 else -1
             px = rand_world_pt(self.config) * 0.4 + px_noise
@@ -306,7 +318,7 @@ class CrowdSim(gym.Env):
             py = sign * (np.random.random() * 3 + 1 + py_noise)
             gx = px
             gy = -py
-        elif "perpendicular_traffic" in scenario:
+        elif "perpendicular_traffic" == scenario:
             sign = 1 if np.random.random() >= 0.5 else -1
             # (1,4) or (-1,-4)
             px = sign * (np.random.random() * 3 + 1 + px_noise)
@@ -318,17 +330,17 @@ class CrowdSim(gym.Env):
             max_x = -min_x
             human_x = (max_x - min_x) * np.random.random() + min_x
             px, gx = human_x, human_x
-            if "side_pref_passing" in scenario:
+            if "side_pref_passing" == scenario:
                 py, gy = self.circle_radius, -self.circle_radius
                 heading = -np.pi / 2
-            elif "side_pref_overtaking" in scenario:
+            elif "side_pref_overtaking" == scenario:
                 offset = 2
                 py = -self.circle_radius + offset
                 gy = self.circle_radius + offset
                 # flip to opposite side and offset
                 heading = np.pi / 2
                 v_pref = 0.3
-        elif scenario in "side_pref_crossing":
+        elif scenario == "side_pref_crossing":
             min_x = -(self.circle_radius + self.robot.radius + agent.radius)
             max_x = -(self.circle_radius - self.robot.radius - agent.radius)
             human_x = (max_x - min_x) * np.random.random() + min_x
@@ -361,7 +373,9 @@ class CrowdSim(gym.Env):
                             self.circle_radius / 2
                         )  # Todo: if circle_radius <= 4, it will get stuck here
                     else:
-                        min_dist = human.radius + agent.radius + self.discomfort_dist
+                        min_dist = (
+                            human.radius + agent.radius + self.discomfort_dist_back
+                        )
                     if vec_norm([px, py], [agent.px, agent.py]) < min_dist:
                         collide = True
                         break
@@ -728,7 +742,7 @@ class CrowdSim(gym.Env):
                     else:
                         for agent in [self.robot] + humans_copy:
                             min_dist = (
-                                human.radius + agent.radius + self.discomfort_dist
+                                human.radius + agent.radius + self.discomfort_dist_back
                             )
                             if (
                                 norm((gx - agent.px, gy - agent.py)) < min_dist
@@ -772,7 +786,9 @@ class CrowdSim(gym.Env):
                     collide = self.check_collision_group((gx, gy), human.radius)
                 else:
                     for agent in [self.robot] + humans_copy:
-                        min_dist = human.radius + agent.radius + self.discomfort_dist
+                        min_dist = (
+                            human.radius + agent.radius + self.discomfort_dist_back
+                        )
                         if (
                             norm((gx - agent.px, gy - agent.py)) < min_dist
                             or norm((gx - agent.gx, gy - agent.gy)) < min_dist
@@ -889,19 +905,26 @@ class CrowdSim(gym.Env):
         collision = False
         step_info = dict()
         self.robot_VR = VelocityRectangle(self.robot)
+
         if self.config.reward.norm_zones:
-            self.left_NZ = NormZoneRectangle(self.robot, "left")
-            self.right_NZ = NormZoneRectangle(self.robot, "right")
+            social_norm = self.config.reward.norm_zone_side
+            self.left_NZ = NormZoneRectangle(self.robot, side="left", norm=social_norm)
+            self.right_NZ = NormZoneRectangle(
+                self.robot, side="right", norm=social_norm
+            )
+
             if self.max_dist_NZ is None:
                 distances = []
                 for idx, zone in enumerate([self.left_NZ, self.right_NZ]):
                     for point in zone._rect.exterior.coords:
-                        distances.append(vec_norm([self.robot.px, self.robot.py], point))
+                        distances.append(
+                            vec_norm([self.robot.px, self.robot.py], point)
+                        )
                 self.max_dist_NZ = max(distances)
 
         vec_rect_violations = 0  # social zone violations
         aggregate_nav_time = 0
-        norm_zone_violated = False
+        norm_zone_violations = 0
         robot_pos = self.robot.get_position()
 
         for i, human in enumerate(self.humans):
@@ -909,7 +932,7 @@ class CrowdSim(gym.Env):
             dy = human.py - self.robot.py
             closest_dist = (dx ** 2 + dy ** 2) ** 0.5 - human.radius - self.robot.radius
 
-            if closest_dist < self.discomfort_dist:
+            if closest_dist < self.discomfort_dist_back:
                 danger_dists.append(closest_dist)
             if closest_dist < 0:
                 collision = True
@@ -925,7 +948,7 @@ class CrowdSim(gym.Env):
                     h_ellipse = make_shapely_ellipse(human.radius, human_pos)
                     for zone in [self.left_NZ, self.right_NZ]:
                         if h_ellipse.intersects(zone._rect):
-                            norm_zone_violated = True
+                            norm_zone_violations += 1
 
             # SOCIAL METRIC 2
             human_VR = VelocityRectangle(human)
@@ -1014,11 +1037,11 @@ class CrowdSim(gym.Env):
             done = True
             step_info["event"] = ReachGoal()
 
-        elif dmin < self.discomfort_dist:
+        elif dmin < self.discomfort_dist_back:
             # only penalize agent for getting too close if it's visible
             # adjust the reward based on FPS
             # print(dmin)
-            reward = (dmin - self.discomfort_dist) * self.discomfort_penalty_factor
+            reward = (dmin - self.discomfort_dist_back) * self.discomfort_penalty_factor
             done = False
             step_info["event"] = Danger(dmin)
 
@@ -1038,12 +1061,8 @@ class CrowdSim(gym.Env):
                     1 - (potential_cur / self.config.reward.exp_denom) ** 0.4
                 )
 
-            if self.config.reward.time_factor:
-                reward *= time_discount_factor
-
             if self.config.reward.norm_zones:
-                if norm_zone_violated:
-                    reward += self.config.reward.norm_zone_penalty
+                reward += self.config.reward.norm_zone_penalty * norm_zone_violations
 
             done = False
             step_info["event"] = Nothing()
@@ -1236,13 +1255,26 @@ class CrowdSim(gym.Env):
 
         ###### START ROBOT DRAWING ######
 
-        if self.robot_VR is not None:
-            polygon = patches.Polygon(
-                xy=self.robot_VR._rect.exterior.coords, fill=False
-            )
-            polygon.set_animated(False)
-            ax.add_artist(polygon)
-            unordered_artists.add(polygon)
+        # if self.robot_VR is not None:
+        #     polygon = patches.Polygon(
+        #         xy=self.robot_VR._rect.exterior.coords, fill=False
+        #     )
+        #     polygon.set_animated(False)
+        #     ax.add_artist(polygon)
+        #     unordered_artists.add(polygon)
+
+        # if self.left_NZ is not None and self.right_NZ is not None:
+        #     for i, NZ in enumerate([self.left_NZ, self.right_NZ]):
+        #         if i == 0:
+        #             color = 'b'
+        #         else:
+        #             color = 'r'
+        #         polygon = patches.Polygon(
+        #             xy=NZ._rect.exterior.coords, fill=False, color=color
+        #         )
+        #         polygon.set_animated(False)
+        #         ax.add_artist(polygon)
+        #         unordered_artists.add(polygon)
 
         # add goal
         goal = mlines.Line2D(
@@ -1263,6 +1295,21 @@ class CrowdSim(gym.Env):
         robot = plt.Circle(
             (robotX, robotY), self.robot.radius, fill=True, color=robot_color
         )
+
+        # TEMPORAL DRAWING
+        temporal_graph = False
+        if temporal_graph and int(self.global_time % 1) == 0:
+            self.robot_history.append((robotX, robotY))
+            if len(self.robot_history) > 0:
+                alpha = np.linspace(0.05, 0.6, len(self.robot_history))
+                for i, pos in enumerate(self.robot_history):
+                    tmp_circle = plt.Circle(
+                        pos, self.robot.radius, fill=True, color="k", alpha=alpha[i]
+                    )
+                    tmp_circle.set_animated(False)
+                    ax.add_artist(tmp_circle)
+                    ordered_artists.append(tmp_circle)
+
         robot.set_animated(True)
         ax.add_artist(robot)
         ordered_artists.append(robot)
