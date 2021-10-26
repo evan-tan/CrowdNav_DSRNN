@@ -1,7 +1,7 @@
 import argparse
 from importlib import import_module
 
-import cudf
+import pandas as pd
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     train_cfg = Config()
     # load progress.csv
     model_csv = model_dir_temp + "/progress.csv"
-    og_df = cudf.read_csv(model_csv)
+    og_df = pd.read_csv(model_csv)
     og_df = og_df.drop(["fps", "misc/total_timesteps"], axis=1)
 
     # grab selectable models & append last row as it will be some strange number
