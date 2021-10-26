@@ -62,9 +62,9 @@ conda create -n $ENV_NAME python=$PYTHON_VER -y &&
 
 # install cuspatial
 # dependencies [cudatoolkit, cudf, rmm]
-conda install -y -c anaconda cudatoolkit=11.0
-conda install -y -c conda-forge -c rapidsai cudf rmm cudatoolkit=11.0
-conda install -y -c conda-forge -c rapidsai cuspatial
+conda install -y -c nvidia cudatoolkit=11.0
+# conda install -y -c conda-forge -c rapidsai cudf rmm cudatoolkit=11.0
+# conda install -y -c conda-forge -c rapidsai cuspatial
 
 # install rvo2
 cd $REPOS_PATH/Python-RVO2 &&
@@ -78,13 +78,12 @@ cd $REPOS_PATH/Python-RVO2 &&
 cd $REPOS_PATH/CrowdNav_DSRNN
 # split install into multiple commands so ...
 # solving environment doesn't take forever
-pip install tensorflow tensorboard
-conda install -y -c conda-forge gym numpy pandas
+conda install -y -c conda-forge gym numpy pandas scipy
 conda install -y -c conda-forge matplotlib shapely
-conda install -y -c conda-forge scipy scikit-image
 conda install -y pytorch==1.7.1 torchvision==0.8.2 torchaudio==0.7.2 cudatoolkit=11.0 -c pytorch
 
 # install openai baselines
+pip install tensorflow tensorboard
 cd $REPOS_PATH/baselines &&
     sudo apt-get update &&
     sudo apt-get install cmake libopenmpi-dev python3-dev zlib1g-dev &&
@@ -93,6 +92,8 @@ cd $REPOS_PATH/baselines &&
 # # install socialforce (UNUSED)
 # cd $REPOS_PATH/socialforce &&
 #     pip3 install -e '.[test,plot]'
+
+cd $REPOS_PATH/CrowdNav_DSRNN && python setup.py install
 
 # go back to cwd
 cd $CWD
