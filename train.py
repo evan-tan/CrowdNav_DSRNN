@@ -7,6 +7,7 @@ from collections import deque
 from datetime import datetime
 from pathlib import Path
 
+import gym
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -21,7 +22,7 @@ from crowd_sim.envs.utils.info import Collision, Danger, Nothing, ReachGoal, Tim
 from pytorchBaselines.a2c_ppo_acktr import algo, utils
 from pytorchBaselines.a2c_ppo_acktr.envs import make_vec_envs
 from pytorchBaselines.a2c_ppo_acktr.model import Policy
-from pytorchBaselines.a2c_ppo_acktr.storage import RolloutStorage
+from pytorchBaselines.a2c_ppo_acktr.storage import RolloutStorage, SRNNRolloutStorage
 
 
 def main():
@@ -130,23 +131,44 @@ def main():
         ax=ax,
         fig=render_fig,
     )
+    if type(envs.observation_space) == gym.spaces.Dict:
+        # for SRNN
+        obs_space = envs.observation_space.spaces
+    else:
+        obs_space = envs.observation_space
 
-    actor_critic = Policy(
-        envs.observation_space.spaces,  # pass the Dict into policy to parse
-        envs.action_space,
-        base_kwargs=config,
-        base=config.robot.policy,
-    )
+    if config.robot.policy == "srnn":
+        actor_critic = Policy(
+            envs.observation_space.spaces,  # pass the Dict into policy to parse
+            envs.action_space,
+            base_kwargs=config,
+            base=config.robot.policy,
+        )
 
-    rollouts = RolloutStorage(
-        config.ppo.num_steps,
-        config.training.num_processes,
-        envs.observation_space.spaces,
-        envs.action_space,
-        config.SRNN.human_node_rnn_size,
-        config.SRNN.human_human_edge_rnn_size,
-        recurrent_cell_type=recurrent_cell,
-    )
+        rollouts = SRNNRolloutStorage(
+            config.ppo.num_steps,
+            config.training.num_processes,
+            envs.observation_space.spaces,
+            envs.action_space,
+            config.SRNN.human_node_rnn_size,
+            config.SRNN.human_human_edge_rnn_size,
+            recurrent_cell_type=recurrent_cell,
+        )
+    elif config.robot.policy == "convgru":
+        actor_critic = Policy(
+            obs_space.shape,  # pass the Dict into policy to parse
+            envs.action_space,
+            base_kwargs=config,
+            base=config.robot.policy,
+        )
+
+        rollouts = RolloutStorage(
+            config.ppo.num_steps,
+            config.training.num_processes,
+            obs_space.shape,
+            envs.action_space,
+            actor_critic.recurrent_hidden_state_size
+        )
 
     if config.training.resume:  # retrieve the model if resume = True
         load_path = config.training.load_path

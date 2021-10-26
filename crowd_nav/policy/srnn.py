@@ -1,5 +1,5 @@
-from crowd_nav.policy.policy import Policy
 import numpy as np
+from crowd_nav.policy.policy import Policy
 from crowd_sim.envs.utils.action import ActionRot, ActionXY
 
 
@@ -8,6 +8,9 @@ class SRNN(Policy):
         super().__init__(config)
         self.time_step = self.config.env.time_step  # Todo: is this needed?
         self.name = "srnn"
+        # TODO: replace jank code with own policy
+        if config.robot.policy != "srnn":
+            self.name = config.robot.policy
         self.trainable = True
         self.multiagent_training = True
 

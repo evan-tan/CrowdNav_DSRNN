@@ -78,7 +78,8 @@ class Config(object):
     reward.exp_denom = 6  # set to same as sim.circle_radius
     reward.gamma = 0.99  # discount factor for rewards
     # from SA-CADRL
-    reward.norm_zone_penalty = -0.05
+    reward.norm_zone_penalty = -1
+    reward.norm_zone_side = 'lhs'  # 'lhs' or 'rhs'
 
     humans = BaseConfig()
     humans.visible = True  # a human is visible to other humans and the robot
@@ -162,6 +163,11 @@ class Config(object):
     ppo.entropy_coef = 0.0  # entropy term coefficient
     ppo.use_gae = True  # use generalized advantage estimation
     ppo.gae_lambda = 0.95  # gae lambda parameter
+
+    # ConvGRU config
+    ConvGRU = BaseConfig()
+    ConvGRU.input_size = 256
+    ConvGRU.hidden_size = 256
 
     # SRNN config
     SRNN = BaseConfig()

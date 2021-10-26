@@ -28,30 +28,39 @@ class CrowdSimDict(CrowdSim):
         # clip the action and observation as you need
 
         d = {}
-        # robot node: px, py, r, gx, gy, v_pref, theta
-        d["robot_node"] = gym.spaces.Box(
-            low=-np.inf,
-            high=np.inf,
-            shape=(
-                1,
-                7,
-            ),
-            dtype=np.float32,
-        )
-        # only consider the robot temporal edge and spatial edges pointing from robot to each human
-        d["temporal_edges"] = gym.spaces.Box(
-            low=-np.inf,
-            high=np.inf,
-            shape=(
-                1,
-                2,
-            ),
-            dtype=np.float32,
-        )
-        d["spatial_edges"] = gym.spaces.Box(
-            low=-np.inf, high=np.inf, shape=(self.human_num, 2), dtype=np.float32
-        )
+        if self.config.robot.policy == "srnn":
+            # robot node: px, py, r, gx, gy, v_pref, theta
+            d["robot_node"] = gym.spaces.Box(
+                low=-np.inf,
+                high=np.inf,
+                shape=(
+                    1,
+                    7,
+                ),
+                dtype=np.float32,
+            )
+            # only consider the robot temporal edge and spatial edges pointing from robot to each human
+            d["temporal_edges"] = gym.spaces.Box(
+                low=-np.inf,
+                high=np.inf,
+                shape=(
+                    1,
+                    2,
+                ),
+                dtype=np.float32,
+            )
+            d["spatial_edges"] = gym.spaces.Box(
+                low=-np.inf, high=np.inf, shape=(self.human_num, 2), dtype=np.float32
+            )
         self.observation_space = gym.spaces.Dict(d)
+        # elif self.config.robot.policy == "convgru":
+        #     n_beams = self.config.lidar.cfg.get("num_beams")
+        #     assert n_beams is not None
+        #     # robot state is shape (7,)
+        #     self.observation_space = gym.spaces.Box(
+        #         low=-np.inf, high=np.inf, shape=(1, n_beams + 7), dtype=np.float32
+        #     )
+
 
         high = np.inf * np.ones(
             [

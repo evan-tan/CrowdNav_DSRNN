@@ -13,3 +13,5 @@ policy_factory["orca"] = ORCA
 policy_factory["none"] = none_policy
 policy_factory["social_force"] = SOCIAL_FORCE
 policy_factory["srnn"] = SRNN
+# TODO: specify ConvGRU policy
+policy_factory['convgru'] = SRNN

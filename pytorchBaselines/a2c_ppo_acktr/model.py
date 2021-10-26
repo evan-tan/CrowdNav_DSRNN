@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
-
-
+from pytorchBaselines.a2c_ppo_acktr.convgru_model import ConvGRU
 from pytorchBaselines.a2c_ppo_acktr.distributions import (
     Bernoulli,
     Categorical,
@@ -25,6 +24,12 @@ class Policy(nn.Module):
             base = SRNN
             self.base = base(obs_shape, base_kwargs)
             self.srnn = True
+        elif base == "convgru":
+            base = ConvGRU
+            print(obs_shape)
+            print(base_kwargs)
+            self.base = base(obs_shape, base_kwargs)
+            self.convgru = True
         else:
             raise NotImplementedError
 
@@ -60,7 +65,8 @@ class Policy(nn.Module):
             value, actor_features, rnn_hxs = self.base(
                 inputs, rnn_hxs, masks, infer=True
             )
-
+        elif self.convgru:
+            value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
         else:
             value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
         dist = self.dist(actor_features)
@@ -77,7 +83,10 @@ class Policy(nn.Module):
 
     def get_value(self, inputs, rnn_hxs, masks):
 
-        value, _, _ = self.base(inputs, rnn_hxs, masks, infer=True)
+        if self.srnn:
+            value, _, _ = self.base(inputs, rnn_hxs, masks, infer=True)
+        elif self.convgru:
+            value, _, _ = self.base(inputs, rnn_hxs, masks)
 
         return value
 

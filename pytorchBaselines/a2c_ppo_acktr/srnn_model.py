@@ -1,8 +1,9 @@
-import torch.nn as nn
-from torch.autograd import Variable
-import torch
 import numpy as np
+
+import torch
+import torch.nn as nn
 from pytorchBaselines.a2c_ppo_acktr.utils import init
+from torch.autograd import Variable
 
 
 class RNNBase(nn.Module):
@@ -506,3 +507,33 @@ class SRNN(nn.Module):
 def reshapeT(T, seq_length, nenv):
     shape = T.size()[1:]
     return T.unsqueeze(0).reshape((seq_length, nenv, *shape))
+
+
+if __name__ == "__main__":
+    from crowd_nav.configs.config import Config
+    from crowd_sim import *
+    from gym.envs.registration import register
+    from pytorchBaselines.a2c_ppo_acktr.envs import make_vec_envs
+    from pytorchBaselines.a2c_ppo_acktr.model import Policy
+
+    config = Config()
+    device = torch.device(
+        "cuda" if config.training.cuda and torch.cuda.is_available() else "cpu"
+    )
+    envs = make_vec_envs(
+        config.env.env_name,
+        config.env.seed,
+        config.training.num_processes,
+        config.reward.gamma,
+        None,
+        device,
+        False,
+        config=config,
+    )
+    actor_critic = Policy(
+        envs.observation_space.spaces,  # pass the Dict into policy to parse
+        envs.action_space,
+        base_kwargs=config,
+        base=config.robot.policy,
+    )
+    print(actor_critic)
