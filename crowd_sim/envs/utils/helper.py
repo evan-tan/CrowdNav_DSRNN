@@ -233,8 +233,8 @@ class VelocityRectangle(Rectangle):
 class NormZoneRectangle(Rectangle):
     """Class to create NormZoneRectangle (aka social norm zones) as suggested in SARL/LM-SARL paper"""
 
-    LENGTH_SCALE = 1
-    WIDTH_SCALE = 1
+    LENGTH_SCALE = 1.5
+    WIDTH_SCALE = 1.5
 
     def __init__(self, agent: Agent, side="", norm="lhs"):
         self._agent = agent
@@ -259,18 +259,20 @@ class NormZoneRectangle(Rectangle):
 
         # default behaviour for rhs norm
         # make "bottom edge" of rectangle touch horizontal axis, translate to left
-        if "rhs" in norm:
+        offset = 0
+        if "lhs" in norm:
             if "left" in side:
                 # LHS of robot
-                self._translate(-rwidth / 2, rlength / 2)
+                self._translate(-rwidth / 2, rlength / 2 + offset)
             elif "right" in side:
                 # RHS of robot and translated forward by 0.6m
-                self._translate(rwidth / 2, rlength / 2 + 0.6)
-        elif "lhs" in norm:
+                self._translate(rwidth / 2, rlength / 2)
+        elif "rhs" in norm:
             if "left" in side:
-                self._translate(rwidth / 2, rlength / 2 + 0.6)
-            elif "right" in side:
                 self._translate(-rwidth / 2, rlength / 2)
+            elif "right" in side:
+                self._translate(rwidth / 2, rlength / 2 + offset)
+
 
         # rotate ABOUT (0,0) based on agent heading
         self._rotate(dtheta, (0, 0))

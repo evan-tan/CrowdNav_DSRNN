@@ -208,8 +208,9 @@ class CrowdSim(gym.Env):
         self.last_acceleration = (0, 0)
         self.last_heading = 0
         self.robot_VR = None  # robot velocity rectangle
-        self.left_NZ = None  # left norm zone
-        self.right_NZ = None  # right norm zone
+        self.left_NZ = None  # left norm zone (UNUSED)
+        self.right_NZ = None  # right norm zone (UNUSED)
+        self.social_NZ = deque(maxlen=config.sim.human_num)
         self.max_dist_NZ = None
 
         if self.render_figure:
@@ -906,27 +907,27 @@ class CrowdSim(gym.Env):
         step_info = dict()
         self.robot_VR = VelocityRectangle(self.robot)
 
-        if self.config.reward.norm_zones:
-            social_norm = self.config.reward.norm_zone_side
-            self.left_NZ = NormZoneRectangle(self.robot, side="left", norm=social_norm)
-            self.right_NZ = NormZoneRectangle(
-                self.robot, side="right", norm=social_norm
-            )
+        # if self.config.reward.norm_zones:
+        #     social_norm = self.config.reward.norm_zone_side
+        #     self.left_NZ = NormZoneRectangle(self.robot, side="left", norm=social_norm)
+        #     self.right_NZ = NormZoneRectangle(
+        #         self.robot, side="right", norm=social_norm
+        #     )
 
-            if self.max_dist_NZ is None:
-                distances = []
-                for idx, zone in enumerate([self.left_NZ, self.right_NZ]):
-                    for point in zone._rect.exterior.coords:
-                        distances.append(
-                            vec_norm([self.robot.px, self.robot.py], point)
-                        )
-                self.max_dist_NZ = max(distances)
+        #     if self.max_dist_NZ is None:
+        #         distances = []
+        #         for idx, zone in enumerate([self.left_NZ, self.right_NZ]):
+        #             for point in zone._rect.exterior.coords:
+        #                 distances.append(
+        #                     vec_norm([self.robot.px, self.robot.py], point)
+        #                 )
+        #         self.max_dist_NZ = max(distances)
 
         vec_rect_violations = 0  # social zone violations
         aggregate_nav_time = 0
-        norm_zone_violations = 0
+        norm_zone_violations = False
         robot_pos = self.robot.get_position()
-
+        r_ellipse = make_shapely_ellipse(self.robot.radius, robot_pos)
         for i, human in enumerate(self.humans):
             dx = human.px - self.robot.px
             dy = human.py - self.robot.py
@@ -944,11 +945,12 @@ class CrowdSim(gym.Env):
             human_pos = human.get_position()
             # check if norm zones violated
             if self.config.reward.norm_zones:
-                if vec_norm(human_pos, robot_pos) <= self.max_dist_NZ:
-                    h_ellipse = make_shapely_ellipse(human.radius, human_pos)
-                    for zone in [self.left_NZ, self.right_NZ]:
-                        if h_ellipse.intersects(zone._rect):
-                            norm_zone_violations += 1
+                social_norm = self.config.reward.norm_zone_side
+                side = "left" if social_norm == "lhs" else "right"
+                norm_zone = NormZoneRectangle(human, side=side, norm=self.config.reward.norm_zone_side)
+                self.social_NZ.append(norm_zone)
+                if r_ellipse.intersects(norm_zone._rect):
+                    norm_zone_violations = True
 
             # SOCIAL METRIC 2
             human_VR = VelocityRectangle(human)
@@ -1062,7 +1064,7 @@ class CrowdSim(gym.Env):
                 )
 
             if self.config.reward.norm_zones:
-                reward += self.config.reward.norm_zone_penalty * norm_zone_violations
+                reward += self.config.reward.norm_zone_penalty * int(norm_zone_violations)
 
             done = False
             step_info["event"] = Nothing()
@@ -1263,8 +1265,8 @@ class CrowdSim(gym.Env):
         #     ax.add_artist(polygon)
         #     unordered_artists.add(polygon)
 
-        # if self.left_NZ is not None and self.right_NZ is not None:
-        #     for i, NZ in enumerate([self.left_NZ, self.right_NZ]):
+        # if len(self.social_NZ) > 0:
+        #     for i, NZ in enumerate(self.social_NZ):
         #         if i == 0:
         #             color = 'b'
         #         else:
@@ -1298,13 +1300,13 @@ class CrowdSim(gym.Env):
 
         # TEMPORAL DRAWING
         temporal_graph = False
-        if temporal_graph and int(self.global_time % 1) == 0:
+        if temporal_graph and self.global_time % 0.25 == 0.0:
             self.robot_history.append((robotX, robotY))
             if len(self.robot_history) > 0:
                 alpha = np.linspace(0.05, 0.6, len(self.robot_history))
                 for i, pos in enumerate(self.robot_history):
                     tmp_circle = plt.Circle(
-                        pos, self.robot.radius, fill=True, color="k", alpha=alpha[i]
+                        pos, self.robot.radius / 2, fill=True, color="k", alpha=alpha[i]
                     )
                     tmp_circle.set_animated(False)
                     ax.add_artist(tmp_circle)

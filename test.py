@@ -14,6 +14,7 @@ import torch
 import torch.nn as nn
 
 from crowd_sim import *
+from crowd_sim.envs.utils.helper import unsqueeze
 from pytorchBaselines.a2c_ppo_acktr.envs import make_vec_envs
 from pytorchBaselines.a2c_ppo_acktr.model import Policy
 from pytorchBaselines.evaluation import evaluate
@@ -24,7 +25,7 @@ def main():
     test_parser = argparse.ArgumentParser("Parser for test.py", add_help=True)
     # the model directory that we are testing
     test_parser.add_argument("--model_dir", type=str, default="data/example_model")
-    test_parser.add_argument("--visualize", action="store_true")
+    test_parser.add_argument("--viz", action="store_true")
     test_parser.add_argument(
         "--test_case",
         type=int,
@@ -153,8 +154,8 @@ def main():
 
     logging.info("Create other envs with new settings")
 
-    if test_args.visualize:
-        fig, ax = plt.subplots(figsize=(7, 7))
+    if test_args.viz:
+        fig, ax = plt.subplots(figsize=(9, 9))
         val = config.sim.square_width + 5
         ax.set_xlim(-val / 2, val / 2)
         ax.set_ylim(-val / 2, val / 2)
@@ -176,7 +177,7 @@ def main():
     if not eval_dir.exists():
         eval_dir.mkdir()
 
-    render_fig = fig if test_args.visualize else None
+    render_fig = fig if test_args.viz else None
     envs = make_vec_envs(
         env_name,
         config.env.seed,
@@ -212,7 +213,7 @@ def main():
         device=device,
         config=config,  # defaults to 500, number of episodes to test
         logging=logging,
-        visualize=test_args.visualize,
+        visualize=test_args.viz,
         recurrent_type=recurrent_cell,
     )
 
@@ -220,16 +221,17 @@ def main():
         # plot cumulative reward vs time step
         metrics = [raw_rewards, discounted_rewards, dist_to_goal]
         COLORS = ("b", "g", "r", "c", "m", "y", "k", "w")
-        fig1, ax1 = plt.subplots()
-        fig2, ax2 = plt.subplots()
-        ax1.set_xlabel("Time step")
-        ax2.set_xlabel("Time step")
+        fig1, ax1 = plt.subplots(figsize=(12, 6))
+        fig2, ax2 = plt.subplots(figsize=(12, 6))
+        ax1.set_xlabel("Time Step")
+        ax2.set_xlabel("Time Step")
+        ax1.set_ylabel("Cumulative Rewards")
+        ax2.set_ylabel("Distance To Goal")
         for i, metric in enumerate(metrics):
             for key in metric:
                 # fetch from the correct bin
                 if len(metric[key]) > 0:
                     time_ = np.linspace(0, len(metric[key][0]), len(metric[key][0]))
-
                     if i == 0:
                         y_label = "Cumulative Reward (Raw)"
                         f_name = "cr_raw"
@@ -237,18 +239,23 @@ def main():
                         y_label = "Cumulative Reward (Discounted)"
                         f_name = "cr_disc"
                     elif i == 2:
-                        y_label = "Dist To Goal"
+                        y_label = "Distance To Goal"
                         f_name = "d2g"
-                    y_data = metric[key] if i == 2 else np.cumsum(metric[key])
+                    y_data = np.array(metric[key]) if i == 2 else np.cumsum(metric[key])
+                    y_data = y_data.squeeze()
                     if i == 2:
-                        ax2.set_title("Distance To Goal VS Time")
-                        ax2.scatter(time_, y_data, color=COLORS[i], s=1, label=y_label)
+                        ax2.set_title("Plot of Distance To Goal against Time")
+                        ax2.plot(
+                            time_, y_data, color=COLORS[i], linewidth=1, label=y_label
+                        )
                     else:
-                        ax1.set_title("Cumulative Rewards VS Time")
-                        ax1.scatter(time_, y_data, color=COLORS[i], s=1, label=y_label)
+                        ax1.set_title("Plot Cumulative Rewards against Time")
+                        ax1.plot(
+                            time_, y_data, color=COLORS[i], linewidth=1, label=y_label
+                        )
 
-        ax1.legend(loc="lower right")
-        ax2.legend(loc="lower left")
+        ax1.legend(loc="lower right", fontsize=12)
+        ax2.legend(loc="lower left", fontsize=12)
 
         plot_dir = log_dir / "plots"
         if not plot_dir.exists():

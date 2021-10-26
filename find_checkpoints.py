@@ -38,5 +38,6 @@ if __name__ == "__main__":
 
     # find top N models, with highest mean rewards
     n = args.top_n
-    candidates = df.nlargest(n, "eprewmean")
+    candidates = df.nlargest(n, ["eprewmean"])
+    candidates = candidates.sort_values(by=["loss/policy_entropy"])
     print(candidates)

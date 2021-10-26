@@ -115,8 +115,9 @@ def evaluate(
             obs["temporal_edges"][0, 0, 0].cpu().numpy(),
         )  # robot theta
 
-        total_render_time = 0
+        total_proc_time = 0
         while not done:
+            start = time.time()
             with torch.no_grad():
                 _, action, _, eval_recurrent_hidden_states = actor_critic.act(
                     obs,
@@ -127,9 +128,7 @@ def evaluate(
             if not done:
                 global_time = base_env.global_time
             if visualize:
-                start = time.time()
                 eval_envs.render()
-                total_render_time += time.time() - start
 
             # Obser reward and next obs
             obs, step_reward, done, infos = eval_envs.step(action)
@@ -189,13 +188,14 @@ def evaluate(
 
                 if info.get("info").get("dist_to_goal"):
                     episode_d2g.append(info.get("info").get("dist_to_goal"))
+            total_proc_time += time.time() - start
 
         # END OF SINGLE EPISODE
 
         print("")
         print("Episode", k, "ends in", step_counter, "steps")
         if visualize:
-            print(f"Average FPS = {1 / (total_render_time / step_counter):.3f}")
+            print(f"Average FPS = {1 / (total_proc_time / step_counter):.3f}")
 
         # multiple steps in each episode, but we want to label with single value. calculate number of occurrences of left and right and take highest
         if config.test.side_preference:
