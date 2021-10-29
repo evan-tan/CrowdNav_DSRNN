@@ -41,10 +41,10 @@ def main():
         help="name of experiment, to name .log file in test/",
     )
     test_parser.add_argument(
-        "--config",
-        type=str,
-        default="",
-        help="Name of config module to load. Use config to use config.py, or leave blank to use train_config",
+        "--default_config",
+        type=bool,
+        default=True,
+        help="Whether or not to use default config used during training",
     )
     test_parser.add_argument(
         "--num_threads", type=int, default=1, help="Number of threads to allocate"
@@ -84,19 +84,15 @@ def main():
     # import config class from saved directory
     # if not found, import from the default directory
     try:
-        if len(test_args.config) > 0:
-            cfg_file = test_args.config
-            print("Using config.py symbolic link")
-        else:
+        if test_args.default_config:
             cfg_file = "train_config"
             print("Using default train_config.py")
-
         model_dir_string = model_dir_temp.replace("/", ".") + ".configs." + cfg_file
         model_arguments = import_module(model_dir_string)
         Config = getattr(model_arguments, "Config")
     except:
         print(
-            f"Failed to get {test_args.config} from {test_args.model_dir}, loading default CrowdNav config"
+            f"Failed to get {test_args.default_config} from {test_args.model_dir}, loading default CrowdNav config"
         )
         from crowd_nav.configs.config import Config
 

@@ -235,6 +235,7 @@ class NormZoneRectangle(Rectangle):
 
     LENGTH_SCALE = 1.5
     WIDTH_SCALE = 1.5
+    OFFSET = 0.6
 
     def __init__(self, agent: Agent, side="", norm="lhs"):
         self._agent = agent
@@ -258,12 +259,11 @@ class NormZoneRectangle(Rectangle):
         super().__init__(rwidth, rlength)
 
         # default behaviour for rhs norm
-        # make "bottom edge" of rectangle touch horizontal axis, translate to left
-        offset = 0
+        # make "bottom (short) edge" of rectangle touch horizontal axis, translate to left/right
         if "lhs" in norm:
             if "left" in side:
                 # LHS of robot
-                self._translate(-rwidth / 2, rlength / 2 + offset)
+                self._translate(-rwidth / 2, rlength / 2 + self.OFFSET)
             elif "right" in side:
                 # RHS of robot and translated forward by 0.6m
                 self._translate(rwidth / 2, rlength / 2)
@@ -271,7 +271,7 @@ class NormZoneRectangle(Rectangle):
             if "left" in side:
                 self._translate(-rwidth / 2, rlength / 2)
             elif "right" in side:
-                self._translate(rwidth / 2, rlength / 2 + offset)
+                self._translate(rwidth / 2, rlength / 2 + self.OFFSET)
 
 
         # rotate ABOUT (0,0) based on agent heading

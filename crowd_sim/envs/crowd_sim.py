@@ -81,7 +81,7 @@ class CrowdSim(gym.Env):
         self.phase = None  # set the phase to be train, val or test
         self.test_case = None  # the test case ID, which will be used to calculate a seed to generate a human crossing case
 
-        # for render
+        # for render, used for blitting to speed up animation
         self.render_axis = None
         self.render_figure = None
         self.render_bg = None
@@ -208,10 +208,7 @@ class CrowdSim(gym.Env):
         self.last_acceleration = (0, 0)
         self.last_heading = 0
         self.robot_VR = None  # robot velocity rectangle
-        self.left_NZ = None  # left norm zone (UNUSED)
-        self.right_NZ = None  # right norm zone (UNUSED)
-        self.social_NZ = deque(maxlen=config.sim.human_num)
-        self.max_dist_NZ = None
+        self.social_NZ = set()
 
         if self.render_figure:
             # grab the background on every draw
@@ -240,6 +237,11 @@ class CrowdSim(gym.Env):
         self.robot_history = deque(
             maxlen=int((self.config.env.time_limit - 1) / self.config.env.time_step)
         )
+
+        sz = config.lidar.cfg["num_beams"]
+        self.lidar_angles = np.zeros(sz)
+        self.lidar_rel_dist = np.zeros(sz)
+        self.lidar_end_pts = np.zeros((sz, 2))
 
         return
 
@@ -292,6 +294,9 @@ class CrowdSim(gym.Env):
         return human
 
     def create_agent_attributes(self, scenario, agent):
+        """ BASED ON SCENARIO generate agent's spawn and goal positions,
+        heading, and v_pref values """
+
         v_pref = 1.0 if agent.v_pref == 0 else agent.v_pref
         # add some noise to simulate all the possible cases robot could meet with human
         px_noise = (np.random.random() - 0.5) * v_pref
@@ -347,6 +352,7 @@ class CrowdSim(gym.Env):
             human_x = (max_x - min_x) * np.random.random() + min_x
             px, gx = human_x, -human_x
             py, gy = 0, 0
+
         # generate spawn and goal positions
         return px, py, gx, gy, heading, v_pref
 
@@ -907,27 +913,24 @@ class CrowdSim(gym.Env):
         step_info = dict()
         self.robot_VR = VelocityRectangle(self.robot)
 
-        # if self.config.reward.norm_zones:
-        #     social_norm = self.config.reward.norm_zone_side
-        #     self.left_NZ = NormZoneRectangle(self.robot, side="left", norm=social_norm)
-        #     self.right_NZ = NormZoneRectangle(
-        #         self.robot, side="right", norm=social_norm
-        #     )
 
-        #     if self.max_dist_NZ is None:
-        #         distances = []
-        #         for idx, zone in enumerate([self.left_NZ, self.right_NZ]):
-        #             for point in zone._rect.exterior.coords:
-        #                 distances.append(
-        #                     vec_norm([self.robot.px, self.robot.py], point)
-        #                 )
-        #         self.max_dist_NZ = max(distances)
+        self.social_NZ = set()
+        if self.config.reward.norm_zones:
+            social_norm = self.config.reward.norm_zone_side
+            # NOTE: for SA-CADRL norm zones, centered at robots
+            left_NZ = NormZoneRectangle(self.robot, side="left", norm=social_norm)
+            right_NZ = NormZoneRectangle(
+                self.robot, side="right", norm=social_norm
+            )
+            self.social_NZ.add(left_NZ)
+            self.social_NZ.add(right_NZ)
 
         vec_rect_violations = 0  # social zone violations
-        aggregate_nav_time = 0
         norm_zone_violations = False
+        aggregate_nav_time = 0
         robot_pos = self.robot.get_position()
         r_ellipse = make_shapely_ellipse(self.robot.radius, robot_pos)
+
         for i, human in enumerate(self.humans):
             dx = human.px - self.robot.px
             dy = human.py - self.robot.py
@@ -945,12 +948,16 @@ class CrowdSim(gym.Env):
             human_pos = human.get_position()
             # check if norm zones violated
             if self.config.reward.norm_zones:
-                social_norm = self.config.reward.norm_zone_side
-                side = "left" if social_norm == "lhs" else "right"
-                norm_zone = NormZoneRectangle(human, side=side, norm=self.config.reward.norm_zone_side)
-                self.social_NZ.append(norm_zone)
-                if r_ellipse.intersects(norm_zone._rect):
-                    norm_zone_violations = True
+                # # NOTE: for custom social norm zones, centered at each human
+                # social_norm = self.config.reward.norm_zone_side
+                # side = "left" if social_norm == "lhs" else "right"
+                # norm_zone = NormZoneRectangle(human, side=side, norm=self.config.reward.norm_zone_side)
+                # self.social_NZ.add(norm_zone)
+
+                if norm_zone_violations is False:
+                    for zone in self.social_NZ:
+                        if r_ellipse.intersects(zone._rect):
+                            norm_zone_violations = True
 
             # SOCIAL METRIC 2
             human_VR = VelocityRectangle(human)
@@ -1063,8 +1070,8 @@ class CrowdSim(gym.Env):
                     1 - (potential_cur / self.config.reward.exp_denom) ** 0.4
                 )
 
-            if self.config.reward.norm_zones:
-                reward += self.config.reward.norm_zone_penalty * int(norm_zone_violations)
+            if self.config.reward.norm_zones and norm_zone_violations:
+                reward += self.config.reward.norm_zone_penalty
 
             done = False
             step_info["event"] = Nothing()
@@ -1238,6 +1245,7 @@ class CrowdSim(gym.Env):
             ax.add_artist(lidar_poly)
             ordered_artists.append(lidar_poly)
 
+            # NOTE: for plotting individual lines
             # for i in range(self.lidar_end_pts.shape[0]):
             #     # color first line different
             #     color = "r" if i == 0 else "k"
@@ -1257,6 +1265,7 @@ class CrowdSim(gym.Env):
 
         ###### START ROBOT DRAWING ######
 
+        # NOTE: for plotting velocity rectangles
         # if self.robot_VR is not None:
         #     polygon = patches.Polygon(
         #         xy=self.robot_VR._rect.exterior.coords, fill=False
@@ -1265,18 +1274,16 @@ class CrowdSim(gym.Env):
         #     ax.add_artist(polygon)
         #     unordered_artists.add(polygon)
 
-        # if len(self.social_NZ) > 0:
-        #     for i, NZ in enumerate(self.social_NZ):
-        #         if i == 0:
-        #             color = 'b'
-        #         else:
-        #             color = 'r'
-        #         polygon = patches.Polygon(
-        #             xy=NZ._rect.exterior.coords, fill=False, color=color
-        #         )
-        #         polygon.set_animated(False)
-        #         ax.add_artist(polygon)
-        #         unordered_artists.add(polygon)
+
+        if len(self.social_NZ) > 0:
+            for norm_zone in self.social_NZ:
+                color = 'r'
+                polygon = patches.Polygon(
+                    xy=norm_zone._rect.exterior.coords, fill=False, color=color
+                )
+                polygon.set_animated(False)
+                ax.add_artist(polygon)
+                unordered_artists.add(polygon)
 
         # add goal
         goal = mlines.Line2D(

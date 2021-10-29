@@ -104,6 +104,8 @@ def get_intersect(p1, q1, p2, q2):
         # using this shaves off ~0.5s per 100iterations for the LiDAR code
         x, y = line_intersection((p1, q1), (p2, q2))
         intersect_pt = [x, y]
+
+    # operations below are slow
     # if is_intersecting:
     #     s = np.vstack([p1, q1, p2, q2])  # s for stacked
     #     h = np.hstack((s, np.ones((4, 1))))  # h for homogeneous
