@@ -12,6 +12,7 @@ from crowd_sim.envs.utils.helper import (
 from matplotlib import patches
 from shapely.affinity import rotate
 from shapely.geometry import LineString
+from shapely.strtree import STRtree
 from sklearn.preprocessing import minmax_scale
 
 
@@ -21,13 +22,14 @@ class LidarSensor:
     NOTE: distances are min/max scaled according to sensor range!!!"""
 
     def __init__(self, cfg: dict):
-        self.SENSOR_POS = [0, 0]  # center of the robot
-        self.SENSOR_HEADING = 0.0
+        self.sensor_pos = [0, 0]  # center of the robot
+        self.sensor_heading = 0.0
         self.MAX_DIST = cfg["max_range"]
-        self.ANGLES = np.linspace(0, 360, cfg["num_spacings"] + 1)
+        self.lidar_angles = np.linspace(0, 360, cfg["num_beams"])
 
-        self.obstacles = []
-        # self.end_pts = []  # absolute x,y where beams end
+        self.obstacles = {"walls": None, "agents": None}
+        self.agent_attrs = []  # (x,y,radius)
+        self.lidar_end_pts = None
         self.mpl_lines = []  # matplotlib lines for visualization
 
     def parse_obstacles(
@@ -38,15 +40,17 @@ class LidarSensor:
         """Parse dynamic/static obstacles for collision checking when updating sensor"""
         if "walls" in mode:
             # create polygon representing walls
-            self.obstacles.append(make_shapely_polygon(obstacle_pts))
+            self.obstacles[mode] = make_shapely_polygon(obstacle_pts)
 
         elif "agents" in mode:
+            assert self.obstacles["walls"] is not None
             # NOTE: assumes a list of lists
             # format: (pos x, pos y, radius)
             tmp_list = []
             for agent in obstacle_pts:
                 tmp_list.append(make_shapely_ellipse(agent[-1], agent[:2]))
-            self.obstacles += tmp_list
+            self.obstacles[mode] = tmp_list
+            self.agent_attrs = obstacle_pts
         else:
             raise NotImplementedError
 
@@ -59,11 +63,11 @@ class LidarSensor:
         :type heading: float, optional
         """
         if xy_pos is not None:
-            self.SENSOR_POS = [xy_pos[0], xy_pos[1]]
+            self.sensor_pos = [xy_pos[0], xy_pos[1]]
         if heading is not None:
-            self.SENSOR_HEADING = heading
+            self.sensor_heading = heading
 
-    def lidar_spin(self, viz=False, normalize=True):
+    def sensor_spin(self, viz=False, normalize=True):
         """Get all end points for each lidar beam
 
         :param viz: Create matplotlib lines, defaults to False
@@ -76,21 +80,23 @@ class LidarSensor:
 
         end_pts = []
         # rotate all lidar beams
-        angles_adj = self.ANGLES + self.SENSOR_HEADING
-        for angle in angles_adj:
+        rot_lidar_angles = self.lidar_angles + self.sensor_heading
+        all_obstacles = [self.obstacles["walls"], *self.obstacles["agents"]]
+        tree = STRtree(all_obstacles)
+        for angle in rot_lidar_angles:
             # create beams and rotate to correct angle
             line = LineString(
                 [
-                    self.SENSOR_POS,
-                    (self.MAX_DIST + self.SENSOR_POS[0], self.SENSOR_POS[1]),
+                    self.sensor_pos,
+                    (self.MAX_DIST + self.sensor_pos[0], self.sensor_pos[1]),
                 ]
             )
-            rot_line = rotate(line, angle, origin=self.SENSOR_POS)
+            rot_line = rotate(line, angle, origin=self.sensor_pos)
             # index 1 for end, index 0 for start of line
             rot_end = rot_line.boundary[1].coords[0]
-
+            result = tree.query(rot_line)
             # check for any intersects between current beam and ALL obstacles
-            for obstacle in self.obstacles:
+            for obstacle in result:
                 tmp_line = rot_line.intersection(obstacle)
                 # no intersect
                 if tmp_line.is_empty:
@@ -105,12 +111,12 @@ class LidarSensor:
 
             # access line intersection information
             start, end = rot_line.boundary
-            if vec_norm(start.coords[0], self.SENSOR_POS) > 0:
+            if vec_norm(start.coords[0], self.sensor_pos) > 0:
                 # multiple intersection points
                 # if collide with obstacle,
                 # start/end = closer/further parts of polygon
-                x_data = (self.SENSOR_POS[0], start.coords[0][0])
-                y_data = (self.SENSOR_POS[1], start.coords[0][1])
+                x_data = (self.sensor_pos[0], start.coords[0][0])
+                y_data = (self.sensor_pos[1], start.coords[0][1])
                 end_pt = start.coords[0]
             else:
                 # if no collision
@@ -130,9 +136,10 @@ class LidarSensor:
         # convert to np array
         distances = np.linalg.norm(np.array(end_pts), axis=1).squeeze()
         if normalize:
-            distances = minmax_scale(distances, feature_range=(0, 1))
+            minmax_scale(distances, feature_range=(0, 1), copy=False)
+        self.lidar_end_pts = end_pts
 
-        return angles_adj, distances
+        return rot_lidar_angles, distances
 
 
 if __name__ == "__main__":
@@ -144,15 +151,15 @@ if __name__ == "__main__":
     ax.set_xlabel("x(m)", fontsize=16)
     ax.set_ylabel("y(m)", fontsize=16)
 
-    cfg = {"max_range": 11, "num_spacings": 180}
+    cfg = {"max_range": 11, "num_beams": 180}
     lidar = LidarSensor(cfg)
 
     # construct a 20x20 box, centered @ origin
     # max dist from lidar = sqrt(2) * 10
     t = 20 / 2
     wall_pts = [(-t, -t), (t, -t), (t, t), (-t, t)]
-    lidar.parse_obstacles(wall_pts, "walls")
-    # create some dummy agents
+
+    # # create some dummy agents
     agent = [
         (1, 1, 0.5),
         (2, 2, 0.5),
@@ -165,15 +172,17 @@ if __name__ == "__main__":
     for a in agent:
         agent_circle = patches.Circle(a[:2], a[-1], color="b")
         ax.add_patch(agent_circle)
-    lidar.parse_obstacles(agent, "agents")
 
     pos, heading = (0, 0), 0  # x,y, degrees
 
-    n_iter = 1e1
+    n_iter = 1e2
     start = time.time()
+    lidar.parse_obstacles(wall_pts, "walls")
     for i in range(int(n_iter)):
+        lidar.parse_obstacles(agent, "agents")
         lidar.update_sensor(pos, heading)
-        angles, distances = lidar.lidar_spin(viz=True)
+        angles, distances = lidar.sensor_spin(viz=True)
+
     elapsed = time.time() - start
     print(f"{n_iter} iterations took {elapsed:4f}s")
 
