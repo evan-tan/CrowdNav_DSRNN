@@ -1,3 +1,4 @@
+.spyproject/
 .idea/
 .vscode/
 *.pyc
@@ -9,3 +10,4 @@
 !/data/example_model_unicycle/
 
 .envrc
+.ipynb_checkpoints

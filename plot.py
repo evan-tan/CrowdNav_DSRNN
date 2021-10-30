@@ -5,25 +5,45 @@ import pandas as pd
 from crowd_sim.envs.utils.helper import smooth_data
 
 
-def create_mpl_label(model_name):
-    if "fov" in model_name:
-        label_str = model_name.replace("_", "-").replace("f", "F").replace("v", "V")
-    elif "group" in model_name:
-        label_str = model_name.replace("_env_", "-").replace("g", "G")
-    return label_str
+def create_mpl_label(str_):
+    # if str_ == "fov_360_reward_norm":
+    #     str_ = "Potential-Based, Normalized"
+    # elif str_ == "fov_360_reward_norm_exp_term_2":
+    #     str_ = r"Shaped Reward, $\alpha$ = 2, Normalized"
+    # elif str_ == "fov_360_reward_norm_exp_term_6":
+    #     str_ = r"Shaped Reward, $\alpha$ = 6, Normalized"
+
+    # jank formatting
+    str_ = str_.replace("_", "-")
+    if "f" in str_.lower():
+        str_ = str_.replace("f", "F").replace("v", "V")
+    elif "g" in str_.lower():
+        # Group Env processing
+        str_ = str_.replace("g", "G").replace("env-", "")
+    return str_
+
+
+def format_metric_label(metric_str):
+    if "eprew" in metric_str.lower():
+        metric_str = "Mean Reward of Last 100 Episodes"
+    elif "loss" in metric_str.lower():
+        metric_str = metric_str.replace("loss/", "").replace("_", " ")
+    return metric_str.title()  # title case
 
 
 def main(save_figures=False, show_checkpoints=False):
     COLORS = ("b", "g", "r", "c", "m", "y", "k", "w")
-    CHECKPOINT_COLOR = "#00FFFF"  # cyan
+    CHECKPOINT_COLOR = "#00FFFF"
 
     # add more training curves by directory name here!
-    models_list = ["example_model"]
-    checkpoint_list = []
+    # Group environment
     # models_list = ["group_env_10", "group_env_15", "group_env_20"]
-    # checkpoint_list = [9864360, 9792360, 9993960]
+    # checkpoint_list = [8712360, 9792360, 9993960]
+    # FoV environment
     # models_list = ["fov_90", "fov_180", "fov_360"]
-    # checkpoint_list = [9000360, 8784360, 9360360]
+    # checkpoint_list = [9000360, 8784360, 9288360]
+    models_list = ['example_model']
+    checkpoint_list = []
 
     model_dicts = {}
     for i in range(len(models_list)):
@@ -39,8 +59,7 @@ def main(save_figures=False, show_checkpoints=False):
     ]
     for i in range(len(metric_list)):
         fig, ax = plt.subplots()
-        # fig.suptitle(metric_list[i])
-        plt.title(metric_list[i])
+        plt.title(format_metric_label(metric_list[i]))
         plt.grid()
         k = 0
         smoothing = 0.95
@@ -54,7 +73,7 @@ def main(save_figures=False, show_checkpoints=False):
 
                 if "entropy" in metric_list[i]:
                     ax.plot(
-                        x_axis, y_raw, COLORS[k], alpha=0.95, label=label_str + " Raw"
+                        x_axis, y_raw, COLORS[k], alpha=0.8, label=label_str + " Raw"
                     )
                 else:
                     y_smooth = smooth_data(y_raw, weight=smoothing)
@@ -74,8 +93,10 @@ def main(save_figures=False, show_checkpoints=False):
                         checkpoint_list[k],
                         y_raw[index],
                         COLORS[k],
-                        marker=".",
-                        markersize=6,
+                        alpha=1,
+                        marker="x",
+                        markersize=10,
+                        label=label_str + " Selected",
                     )
 
                 print(
@@ -86,13 +107,14 @@ def main(save_figures=False, show_checkpoints=False):
                     np.average(model_dicts[key][metric_list[i]]),
                 )
                 k += 1
-        fig.set_figheight(5)
-        fig.set_figwidth(8)
-        ax.set_xlabel("total_timesteps")
+        fig.set_figheight(6)
+        fig.set_figwidth(12)
+        ax.set_xlabel("Number of Time Steps")
         # shrink axes by 20%
         box = ax.get_position()
-        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+        ax.set_position([box.x0, box.y0, box.width * 0.85, box.height])
         ax.legend(loc="center left", bbox_to_anchor=(1, 0.5))
+        # ax.legend(loc="best")
 
         if save_figures:
             f_name = "metric" + str(i + 1) + ".jpg"
@@ -103,6 +125,4 @@ def main(save_figures=False, show_checkpoints=False):
 
 
 if __name__ == "__main__":
-    main(False, False)
-    # main(False, True)
-    # main(True, True)
+    main(0, 0)

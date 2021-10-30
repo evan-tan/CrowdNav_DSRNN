@@ -30,9 +30,11 @@ class Policy(nn.Module):
             self.convgru = True
         else:
             raise NotImplementedError
-        dist_input_sz = (
-            self.base.actor.fc2.out_features if self.convgru else self.base.output_size
-        )
+
+        if base == ConvGRU:
+            dist_input_sz = self.base.actor.fc2.out_features
+        else:
+            dist_input_sz = self.base.output_size
 
         if action_space.__class__.__name__ == "Discrete":
             num_outputs = action_space.n

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 set -e
-source $HOME/miniconda3/etc/profile.d/conda.sh
 
 # main folder where all repos will be cloned into
 REPOS_PATH="$HOME/repos/fyp_repos"
@@ -12,8 +11,11 @@ PYTHON_VER="3.8"
 CWD="$(pwd)"
 
 # miniconda 4.5.4 to prevent breaking on Ubuntu 18.04
-sh ./install_conda.sh
-sh ./install_cmake.sh
+# NOTE: use latest miniconda if you find that resolving environment takes 4ever
+# sh ./install_conda.sh
+# sh ./install_cmake.sh
+
+source $HOME/miniconda3/etc/profile.d/conda.sh
 
 # $REPOS_PATH/
 # ├── baselines
@@ -60,12 +62,6 @@ conda create -n $ENV_NAME python=$PYTHON_VER -y &&
     #### ACTIVATE CONDA ENVIRONMENT ####
     conda activate $ENV_NAME
 
-# install cuspatial
-# dependencies [cudatoolkit, cudf, rmm]
-conda install -y -c nvidia cudatoolkit=11.0
-# conda install -y -c conda-forge -c rapidsai cudf rmm cudatoolkit=11.0
-# conda install -y -c conda-forge -c rapidsai cuspatial
-
 # install rvo2
 cd $REPOS_PATH/Python-RVO2 &&
     # DO NOT FOLLOW README and install old cython, will break
@@ -78,12 +74,12 @@ cd $REPOS_PATH/Python-RVO2 &&
 cd $REPOS_PATH/CrowdNav_DSRNN
 # split install into multiple commands so ...
 # solving environment doesn't take forever
-conda install -y -c conda-forge gym numpy pandas scipy
-conda install -y -c conda-forge matplotlib shapely
+conda install -y -c conda-forge gym numpy pandas matplotlib
 conda install -y pytorch==1.7.1 torchvision==0.8.2 torchaudio==0.7.2 cudatoolkit=11.0 -c pytorch
 
 # install openai baselines
-pip install tensorflow tensorboard
+cd $CWD && pip install -r requirements.txt
+
 cd $REPOS_PATH/baselines &&
     sudo apt-get update &&
     sudo apt-get install cmake libopenmpi-dev python3-dev zlib1g-dev &&
@@ -93,7 +89,7 @@ cd $REPOS_PATH/baselines &&
 # cd $REPOS_PATH/socialforce &&
 #     pip3 install -e '.[test,plot]'
 
-cd $REPOS_PATH/CrowdNav_DSRNN && python setup.py install
+cd $REPOS_PATH/CrowdNav_DSRNN && pip install -e .
 
 # go back to cwd
 cd $CWD
