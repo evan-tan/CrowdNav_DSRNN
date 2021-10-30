@@ -1,17 +1,21 @@
+# %%
+
+from typing import OrderedDict
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 import torchvision.transforms as T
-from pytorchBaselines.a2c_ppo_acktr.distributions import (
-    Bernoulli,
-    Categorical,
-    DiagGaussian,
-)
-from pytorchBaselines.a2c_ppo_acktr.utils import init
 from torch import optim
 from torch.optim import lr_scheduler
+
+
+def init(module, weight_init, bias_init, gain=1):
+    weight_init(module.weight.data, gain=gain)
+    bias_init(module.bias.data)
+    return module
 
 
 class NNBase(nn.Module):
@@ -101,57 +105,104 @@ class ConvGRU(NNBase):
         self.config = config
         self._is_recurrent = True
 
-        init_ = lambda m: init(
+        self._init_ = lambda m: init(
             m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2)
         )
 
         # NOTE: critic could be 4-8x wider than actor
-        actor_hidden_size = 64
-        critic_hidden_size = 256
-        gru_input_size = config.ConvGRU.input_size
+        self.actor_hidden_size = 64
+        self.critic_hidden_size = 256
         # GRU output dims, also shared between actor and critic
-        shared_ac_size = config.ConvGRU.hidden_size
+        # shared_ac_size = config.ConvGRU.hidden_size
+        self.gru_input_size = 256  # config.ConvGRU.input_size
+        # GRU output dims, also shared between actor and critic
+        self.shared_ac_size = 256
         recurrent = True
-        super(ConvGRU, self).__init__(recurrent, gru_input_size, shared_ac_size)
 
-        self.conv_blk = nn.Sequential(
-            init_(
-                nn.Conv1d(
-                    config.lidar.cfg["num_beams"],
-                    out_channels=64,
-                    kernel_size=7,
-                    stride=2,
-                )
-            ),
-            nn.LeakyReLU(),
-            init_(nn.Conv1d(64, out_channels=128, kernel_size=5, stride=2)),
-            nn.LeakyReLU(),
-            init_(nn.Conv1d(128, out_channels=256, kernel_size=3, stride=1)),
+        super(ConvGRU, self).__init__(
+            recurrent, self.gru_input_size, self.shared_ac_size
         )
 
-        self.actor = nn.Sequential(
-            init_(nn.Linear(shared_ac_size, actor_hidden_size)),
-            nn.Tanh(),
-            init_(nn.Linear(actor_hidden_size, actor_hidden_size)),
-            nn.Tanh(),
-        )
+        self.conv_blk = self._build_conv_block()
 
-        self.critic = nn.Sequential(
-            init_(nn.Linear(shared_ac_size, critic_hidden_size)),
-            nn.Tanh(),
-            init_(nn.Linear(critic_hidden_size, critic_hidden_size)),
-            nn.Tanh(),
-        )
-        self.critic_linear = init_(nn.Linear(critic_hidden_size, 1))
+        self.ap = nn.AvgPool1d(kernel_size=21, stride=1, padding=0)
+        self.mp = nn.MaxPool1d(kernel_size=21, stride=1, padding=0)
+
+        self.actor = self._build_actor()
+        self.critic, self.critic_linear = self._build_critic()
 
         self.train()
+
+    def _build_critic(self):
+        # build critic network
+        critic_layers = OrderedDict(
+            [
+                (
+                    "fc1",
+                    self._init_(
+                        nn.Linear(self.shared_ac_size, self.critic_hidden_size)
+                    ),
+                ),
+                ("tanh1", nn.Tanh()),
+                (
+                    "fc2",
+                    self._init_(
+                        nn.Linear(self.critic_hidden_size, self.critic_hidden_size)
+                    ),
+                ),
+                ("tanh2", nn.Tanh()),
+            ]
+        )
+        critic_linear = self._init_(nn.Linear(self.critic_hidden_size, 1))
+        return nn.Sequential(critic_layers), critic_linear
+
+    def _build_actor(self):
+        # build actor network
+        actor_layers = OrderedDict(
+            [
+                (
+                    "fc1",
+                    self._init_(nn.Linear(self.shared_ac_size, self.actor_hidden_size)),
+                ),
+                ("tanh1", nn.Tanh()),
+                (
+                    "fc2",
+                    self._init_(
+                        nn.Linear(self.actor_hidden_size, self.actor_hidden_size)
+                    ),
+                ),
+                ("tanh2", nn.Tanh()),
+            ]
+        )
+        return nn.Sequential(actor_layers)
+
+    def _build_conv_block(self):
+        # (num_rollouts, 1, 187) -> (num_rollouts, 64, 90) -> ...
+        # (num_rollouts, 128, 43) -> (num_rollouts, 256, 21)
+
+        # Conv1d format: (in_c, out_c, kernel_sz, stride, ...)
+        layers_dict = OrderedDict(
+            [
+                ("conv1", self._init_(nn.Conv1d(1, 64, 7, 2))),
+                ("lrelu1", nn.LeakyReLU()),
+                ("conv2", self._init_(nn.Conv1d(64, 128, 5, 2))),
+                ("lrelu2", nn.LeakyReLU()),
+                ("conv3", self._init_(nn.Conv1d(128, 128, 3, 2))),
+                ("lrelu3", nn.LeakyReLU()),
+            ]
+        )
+        return nn.Sequential(layers_dict)
 
     def forward(self, inputs, rnn_hxs, masks):
         x = inputs
 
         if self.is_recurrent:
             x = self.conv_blk(x)
-            print(x.shape)
+
+            x = torch.cat([self.mp(x), self.ap(x)], dim=1)
+            # remove dims of size 1
+            x = x.squeeze()
+
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
 
         hidden_critic = self.critic(x)

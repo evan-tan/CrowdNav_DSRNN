@@ -26,23 +26,23 @@ class Policy(nn.Module):
             self.srnn = True
         elif base == "convgru":
             base = ConvGRU
-            print(obs_shape)
-            print(base_kwargs)
             self.base = base(obs_shape, base_kwargs)
             self.convgru = True
         else:
             raise NotImplementedError
+        dist_input_sz = (
+            self.base.actor.fc2.out_features if self.convgru else self.base.output_size
+        )
 
         if action_space.__class__.__name__ == "Discrete":
             num_outputs = action_space.n
-            self.dist = Categorical(self.base.output_size, num_outputs)
+            self.dist = Categorical(dist_input_sz, num_outputs)
         elif action_space.__class__.__name__ == "Box":
             num_outputs = action_space.shape[0]
-
-            self.dist = DiagGaussian(self.base.output_size, num_outputs)
+            self.dist = DiagGaussian(dist_input_sz, num_outputs)
         elif action_space.__class__.__name__ == "MultiBinary":
             num_outputs = action_space.shape[0]
-            self.dist = Bernoulli(self.base.output_size, num_outputs)
+            self.dist = Bernoulli(dist_input_sz, num_outputs)
         else:
             raise NotImplementedError
 
@@ -69,6 +69,7 @@ class Policy(nn.Module):
             value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
         else:
             value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
+
         dist = self.dist(actor_features)
 
         if deterministic:

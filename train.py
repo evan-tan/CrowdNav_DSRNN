@@ -156,7 +156,7 @@ def main():
         )
     elif config.robot.policy == "convgru":
         actor_critic = Policy(
-            obs_space.shape,  # pass the Dict into policy to parse
+            obs_space.shape,
             envs.action_space,
             base_kwargs=config,
             base=config.robot.policy,
@@ -167,7 +167,7 @@ def main():
             config.training.num_processes,
             obs_space.shape,
             envs.action_space,
-            actor_critic.recurrent_hidden_state_size
+            actor_critic.recurrent_hidden_state_size,
         )
 
     if config.training.resume:  # retrieve the model if resume = True
@@ -226,21 +226,34 @@ def main():
         for step in range(config.ppo.num_steps):
             # Sample actions
             with torch.no_grad():
-
-                rollouts_obs = {}
-                for key in rollouts.obs:
-                    rollouts_obs[key] = rollouts.obs[key][step]
-                rollouts_hidden_s = {}
-                for key in rollouts.recurrent_hidden_states:
-                    rollouts_hidden_s[key] = rollouts.recurrent_hidden_states[key][step]
-                (
-                    value,
-                    action,
-                    action_log_prob,
-                    recurrent_hidden_states,
-                ) = actor_critic.act(
-                    rollouts_obs, rollouts_hidden_s, rollouts.masks[step]
-                )
+                if config.robot.policy == "srnn":
+                    rollouts_obs = {}
+                    for key in rollouts.obs:
+                        rollouts_obs[key] = rollouts.obs[key][step]
+                    rollouts_hidden_s = {}
+                    for key in rollouts.recurrent_hidden_states:
+                        rollouts_hidden_s[key] = rollouts.recurrent_hidden_states[key][
+                            step
+                        ]
+                    (
+                        value,
+                        action,
+                        action_log_prob,
+                        recurrent_hidden_states,
+                    ) = actor_critic.act(
+                        rollouts_obs, rollouts_hidden_s, rollouts.masks[step]
+                    )
+                else:
+                    (
+                        value,
+                        action,
+                        action_log_prob,
+                        recurrent_hidden_states,
+                    ) = actor_critic.act(
+                        rollouts.obs[step],
+                        rollouts.recurrent_hidden_states[step],
+                        rollouts.masks[step],
+                    )
 
             if config.sim.render:
                 envs.render()
@@ -279,15 +292,23 @@ def main():
             )
 
         with torch.no_grad():
-            rollouts_obs = {}
-            for key in rollouts.obs:
-                rollouts_obs[key] = rollouts.obs[key][-1]
-            rollouts_hidden_s = {}
-            for key in rollouts.recurrent_hidden_states:
-                rollouts_hidden_s[key] = rollouts.recurrent_hidden_states[key][-1]
-            next_value = actor_critic.get_value(
-                rollouts_obs, rollouts_hidden_s, rollouts.masks[-1]
-            ).detach()
+            if config.robot.policy == "srnn":
+                rollouts_obs = {}
+                for key in rollouts.obs:
+                    rollouts_obs[key] = rollouts.obs[key][-1]
+                rollouts_hidden_s = {}
+                for key in rollouts.recurrent_hidden_states:
+                    rollouts_hidden_s[key] = rollouts.recurrent_hidden_states[key][-1]
+                next_value = actor_critic.get_value(
+                    rollouts_obs, rollouts_hidden_s, rollouts.masks[-1]
+                ).detach()
+
+            else:
+                next_value = actor_critic.get_value(
+                    rollouts.obs[-1],
+                    rollouts.recurrent_hidden_states[-1],
+                    rollouts.masks[-1],
+                ).detach()
 
         rollouts.compute_returns(
             next_value,

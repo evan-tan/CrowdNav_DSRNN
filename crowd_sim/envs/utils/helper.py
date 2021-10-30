@@ -1,11 +1,11 @@
-from collections import deque
 from typing import List
 
 import matplotlib.lines as mlines
 import numpy as np
 import shapely.geometry
-from crowd_sim.envs.utils.agent import Agent
 from shapely.geometry import LineString
+
+from crowd_sim.envs.utils.agent import Agent
 
 
 def unsqueeze(arr: np.ndarray, dim: int) -> np.ndarray:
@@ -13,6 +13,7 @@ def unsqueeze(arr: np.ndarray, dim: int) -> np.ndarray:
     return np.expand_dims(arr, axis=dim)
 
 
+# originally placed in lidarv2.py
 def create_agents_arr(agent_xyr: np.ndarray, n_pts: int) -> np.ndarray:
     """Create all agent points in the WORLD FRAME
 
@@ -272,7 +273,6 @@ class NormZoneRectangle(Rectangle):
                 self._translate(-rwidth / 2, rlength / 2)
             elif "right" in side:
                 self._translate(rwidth / 2, rlength / 2 + self.OFFSET)
-
 
         # rotate ABOUT (0,0) based on agent heading
         self._rotate(dtheta, (0, 0))

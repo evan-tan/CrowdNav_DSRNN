@@ -360,11 +360,9 @@ class LidarSensor:
         rel_end_pts = lidar_end_pts - self.sensor_pos
         rel_dist = np.linalg.norm(rel_end_pts, axis=1)
 
-        # minmax scale to 0-1 based on max sensor range
+        # scale to 0-1 based on max sensor range
         if normalize:
-            rel_dist = (rel_dist - rel_dist.min()) / (
-                self.cfg["max_range"] - rel_dist.min()
-            )
+            rel_dist = np.clip(rel_dist / self.cfg["max_range"], 0, 1)
 
         # adjust back to world frame
         Fw_lidar_angles = rot_lidar_angles - self.sensor_heading

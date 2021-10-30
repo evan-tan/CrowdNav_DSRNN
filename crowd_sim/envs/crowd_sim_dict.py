@@ -5,7 +5,8 @@ import numpy as np
 from numpy.linalg import norm
 
 from crowd_sim.envs import CrowdSim
-from crowd_sim.envs.utils.action import ActionRot, ActionXY
+from crowd_sim.envs.utils.action import ActionRot
+from crowd_sim.envs.utils.helper import unsqueeze
 
 
 class CrowdSimDict(CrowdSim):
@@ -52,15 +53,13 @@ class CrowdSimDict(CrowdSim):
             d["spatial_edges"] = gym.spaces.Box(
                 low=-np.inf, high=np.inf, shape=(self.human_num, 2), dtype=np.float32
             )
-        self.observation_space = gym.spaces.Dict(d)
-        # elif self.config.robot.policy == "convgru":
-        #     n_beams = self.config.lidar.cfg.get("num_beams")
-        #     assert n_beams is not None
-        #     # robot state is shape (7,)
-        #     self.observation_space = gym.spaces.Box(
-        #         low=-np.inf, high=np.inf, shape=(1, n_beams + 7), dtype=np.float32
-        #     )
-
+            self.observation_space = gym.spaces.Dict(d)
+        elif self.config.robot.policy == "convgru":
+            n_beams = self.config.lidar.cfg.get("num_beams")
+            assert n_beams is not None
+            self.observation_space = gym.spaces.Box(
+                low=-np.inf, high=np.inf, shape=(1, 7 + n_beams), dtype=np.float32
+            )
 
         high = np.inf * np.ones(
             [
@@ -71,28 +70,35 @@ class CrowdSimDict(CrowdSim):
 
     # reset = True: reset calls this function; reset = False: step calls this function
     def generate_ob(self, reset):
-        ob = {}
 
         # nodes
         visible_humans, num_visibles, human_visibility = self.get_num_human_in_fov()
-
-        ob["robot_node"] = self.robot.get_full_state_list_noV()
-
         self.update_last_human_states(human_visibility, reset=reset)
 
-        # edges
-        # temporal edge: robot's velocity
-        ob["temporal_edges"] = np.array([self.robot.vx, self.robot.vy])
-        # spatial edges: the vector pointing from the robot position to each human's position
-        ob["spatial_edges"] = np.zeros((self.human_num, 2))
-        for i in range(self.human_num):
-            relative_pos = np.array(
-                [
-                    self.last_human_states[i, 0] - self.robot.px,
-                    self.last_human_states[i, 1] - self.robot.py,
-                ]
-            )
-            ob["spatial_edges"][i] = relative_pos
+        if self.config.robot.policy == "srnn":
+            ob = {}
+            ob["robot_node"] = self.robot.get_full_state_list_noV()
+            # edges
+            # temporal edge: robot's velocity
+            ob["temporal_edges"] = np.array([self.robot.vx, self.robot.vy])
+            # spatial edges: the vector pointing from the robot position to each human's position
+            ob["spatial_edges"] = np.zeros((self.human_num, 2))
+            # TODO: try using a proximity radius
+            # TODO: normalize min/max or means
+            for i in range(self.human_num):
+                relative_pos = np.array(
+                    [
+                        self.last_human_states[i, 0] - self.robot.px,
+                        self.last_human_states[i, 1] - self.robot.py,
+                    ]
+                )
+                ob["spatial_edges"][i] = relative_pos
+        elif self.config.robot.policy == "convgru":
+            # TODO: fix robot's state input??
+            robot_state = np.array(self.robot.get_full_state_list_noV()) / self.config.lidar.cfg['max_range']
+            robot_state = np.clip(robot_state, 0, 1)
+            ob = np.append(robot_state, self.lidar_rel_dist)
+            ob = unsqueeze(ob, dim=0)
 
         return ob
 
@@ -178,7 +184,10 @@ class CrowdSimDict(CrowdSim):
             angles, rel_distances, lidar_end_pts = self.lidar.sensor_spin(
                 normalize=True
             )
-
+            self.lidar_angles = angles
+            # invert because we want to highlight areas that are closest to robot maybe? due to mean & max pool layers
+            inv_rel_dist = abs(1 - rel_distances)
+            self.lidar_rel_dist = inv_rel_dist
             self.lidar_end_pts = lidar_end_pts
 
         # initialize potential_cur

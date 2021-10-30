@@ -78,8 +78,8 @@ class Config(object):
     reward.exp_denom = 6  # set to same as sim.circle_radius
     reward.gamma = 0.99  # discount factor for rewards
     # from SA-CADRL
-    reward.norm_zone_penalty = -1
     reward.norm_zone_side = 'lhs'  # 'lhs' or 'rhs'
+    reward.norm_zone_penalty = -0.5
 
     humans = BaseConfig()
     humans.visible = True  # a human is visible to other humans and the robot
@@ -113,6 +113,8 @@ class Config(object):
     robot.visible = False  # the robot is visible to humans
     # srnn for now
     robot.policy = "srnn"
+    # robot.policy = 'convgru'
+
     robot.radius = 0.3
     robot.v_pref = 1
     robot.sensor = "coordinates"
