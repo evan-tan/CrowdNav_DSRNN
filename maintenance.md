@@ -46,6 +46,7 @@ parallel traffic, perpendicular traffic, circle crossing, etc. This is done in `
         - Robot behaviour: fix spawn and goal every episode instead of being random (
           see `CrowdSim.generate_robot_humans()`)
         - Agent behaviour: depends on `sim.test_sim`
+- To view distance to goal VS time and the corresponding cumulative discounted/non-discounted rewards, use the `--study_scenario` flag in [test.py](test.py)
 
 # Training
 
