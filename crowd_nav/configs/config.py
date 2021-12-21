@@ -10,6 +10,13 @@ class Config(object):
     test = BaseConfig()
     test.social_metrics = False
 
+    static_obst = BaseConfig()
+    static_obst.enable = True
+    static_obst.num = 5
+    static_obst.size_range = (0.5, 0.5)
+    # load obstacles during runtime in train.py or test.py!
+    static_obst.points = None
+
     sim = BaseConfig()
     sim.render = False  # show GUI for visualization
     # currently selected at random
@@ -78,7 +85,7 @@ class Config(object):
     reward.exp_denom = 6  # set to same as sim.circle_radius
     reward.gamma = 0.99  # discount factor for rewards
     # from SA-CADRL
-    reward.norm_zone_side = 'lhs'  # 'lhs' or 'rhs'
+    reward.norm_zone_side = "lhs"  # 'lhs' or 'rhs'
     reward.norm_zone_penalty = -0.5
 
     humans = BaseConfig()
