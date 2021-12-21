@@ -183,11 +183,11 @@ class ConvGRU(NNBase):
         # Conv1d format: (in_c, out_c, kernel_sz, stride, ...)
         layers_dict = OrderedDict(
             [
-                ("conv1", self._init_(nn.Conv1d(1, 64, 7, 2))),
+                ("conv1", self._init_(nn.Conv1d(1, 512, 7, 2))),
                 ("lrelu1", nn.LeakyReLU()),
-                ("conv2", self._init_(nn.Conv1d(64, 128, 5, 2))),
+                ("conv2", self._init_(nn.Conv1d(512, 256, 5, 2))),
                 ("lrelu2", nn.LeakyReLU()),
-                ("conv3", self._init_(nn.Conv1d(128, 128, 3, 2))),
+                ("conv3", self._init_(nn.Conv1d(256, 128, 3, 2))),
                 ("lrelu3", nn.LeakyReLU()),
             ]
         )
