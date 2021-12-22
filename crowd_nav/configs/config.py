@@ -10,12 +10,17 @@ class Config(object):
     test = BaseConfig()
     test.social_metrics = False
 
-    static_obst = BaseConfig()
-    static_obst.enable = True
-    static_obst.num = 5
-    static_obst.size_range = (0.5, 0.5)
-    # load obstacles during runtime in train.py or test.py!
-    static_obst.points = None
+    # everything related to static obstacles NOT including static humans...
+    obstacle = BaseConfig()
+    obstacle.walls = BaseConfig()  # this will be dependent on sim.square_width
+    obstacle.static = BaseConfig()
+
+    obstacle.walls.enable = True
+    obstacle.static.enable = True
+    obstacle.static.num = 5
+    obstacle.static.size_range = (0.5, 0.5)
+    # NOTE: load obstacles during runtime in train.py or test.py!
+    obstacle.static.points = None
 
     sim = BaseConfig()
     sim.render = False  # show GUI for visualization

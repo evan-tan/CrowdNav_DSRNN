@@ -2,6 +2,7 @@ import numpy as np
 import rvo2
 from crowd_nav.policy.policy import Policy
 from crowd_sim.envs.utils.action import ActionXY
+from crowd_sim.envs.utils.helper import Rectangle
 
 
 class ORCA(Policy):
@@ -56,10 +57,35 @@ class ORCA(Policy):
         self.name = "ORCA"
         self.max_neighbors = None
         self.radius = None
-        self.max_speed = (
-            1  # the ego agent assumes that all other agents have this max speed
-        )
+        # the ego agent assumes that all other agents have this max speed
+        self.max_speed = config.humans.v_pref
         self.sim = None
+        self.obstacle_points = None
+
+        # this is generated at runtime in train.py / test.py
+        if config.obstacle.static.enable:
+            self.obstacle_points = config.obstacle.static.points
+
+        if config.obstacle.walls.enable:
+            world_size = config.sim.square_width
+            # misleading because it's not a rectangle
+            self.polygon_vertices = list(
+                Rectangle(world_size, world_size)._rect.exterior.coords
+            )
+
+    # add obstacles into simulation
+    def process_obstacles(self):
+        if self.config.obstacle.static.enable:
+            num_obstacles = self.config.obstacle.static.num
+            if num_obstacles >= 1:
+                for i in range(num_obstacles):
+                    obstacle = self.obstacle_points[i]
+                    # method requires obstacle vertices in counter-clockwise
+                    self.simulator.addObstacle(obstacle)
+            else:
+                self.simulator.addObstacle(self.simulator.obstacle_points)
+            # must be called
+            self.simulator.processObstacles()
 
     def predict(self, state):
         """
@@ -90,7 +116,7 @@ class ORCA(Policy):
             self.sim = None
         if self.sim is None:
             self.sim = rvo2.PyRVOSimulator(
-                self.time_step, *params, self.radius, self.max_speed
+                self.config.env.time_step, *params, self.radius, self.max_speed
             )
             self.sim.addAgent(
                 self_state.position,

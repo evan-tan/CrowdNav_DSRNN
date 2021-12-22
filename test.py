@@ -14,7 +14,7 @@ import torch
 import torch.nn as nn
 
 from crowd_sim import *
-from crowd_sim.envs.utils.helper import unsqueeze
+from crowd_sim.envs.utils.helper import generate_static_obstacles
 from pytorchBaselines.a2c_ppo_acktr.envs import make_vec_envs
 from pytorchBaselines.a2c_ppo_acktr.model import Policy
 from pytorchBaselines.evaluation import evaluate
@@ -42,8 +42,7 @@ def main():
     )
     test_parser.add_argument(
         "--default_config",
-        type=bool,
-        default=True,
+        action="store_true",
         help="Whether or not to use default config used during training",
     )
     test_parser.add_argument(
@@ -83,20 +82,21 @@ def main():
 
     # import config class from saved directory
     # if not found, import from the default directory
-    try:
-        if test_args.default_config:
-            cfg_file = "train_config"
-            print("Using default train_config.py")
+    print(test_args.default_config)
+    if test_args.default_config:
+        cfg_file = "train_config"
+        print("Using default train_config.py")
         model_dir_string = model_dir_temp.replace("/", ".") + ".configs." + cfg_file
         model_arguments = import_module(model_dir_string)
         Config = getattr(model_arguments, "Config")
-    except:
+    else:
         print(
             f"Failed to get {test_args.default_config} from {test_args.model_dir}, loading default CrowdNav config"
         )
         from crowd_nav.configs.config import Config
 
     config = Config()
+    config.obstacle.static.points = generate_static_obstacles()
 
     # configure logging and device
     # print test result in log file

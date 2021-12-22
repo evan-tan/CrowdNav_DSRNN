@@ -3,9 +3,9 @@ from typing import List
 import matplotlib.lines as mlines
 import numpy as np
 import shapely.geometry
-from shapely.geometry import LineString
 
-from crowd_sim.envs.utils.agent import Agent
+# from crowd_sim.envs.utils.agent import Agent
+from shapely.geometry import LineString
 
 
 def unsqueeze(arr: np.ndarray, dim: int) -> np.ndarray:
@@ -169,6 +169,11 @@ def make_shapely_ellipse(radius, position, downsample=False):
     return ellipse
 
 
+def generate_static_obstacles():
+    # TODO: import old code and fix
+    pass
+
+
 # https://shapely.readthedocs.io/en/stable/manual.html#shapely.geometry.box
 class Rectangle:
     """Rectangle base class.
@@ -203,7 +208,7 @@ class VelocityRectangle(Rectangle):
     LENGTH_SCALE = 3
     WIDTH_SCALE = 1
 
-    def __init__(self, agent: Agent = None):
+    def __init__(self, agent=None):
         self._agent = agent
         assert agent is not None
 
@@ -238,7 +243,7 @@ class NormZoneRectangle(Rectangle):
     WIDTH_SCALE = 1.5
     OFFSET = 0.6
 
-    def __init__(self, agent: Agent, side="", norm="lhs"):
+    def __init__(self, agent, side="", norm="lhs"):
         self._agent = agent
         assert agent is not None
         assert "left" in side or "right" in side
