@@ -14,9 +14,6 @@ from matplotlib import cm, patches
 from numpy.linalg import norm
 
 from crowd_sim.envs.utils.helper import (
-    NormZoneRectangle,
-    Rectangle,
-    VelocityRectangle,
     check_inside_world,
     make_shapely_ellipse,
     rand_world_pt,
@@ -26,6 +23,11 @@ from crowd_sim.envs.utils.helper import (
 from crowd_sim.envs.utils.human import Human
 from crowd_sim.envs.utils.info import Collision, Danger, Nothing, ReachGoal, Timeout
 from crowd_sim.envs.utils.lidarv2 import LidarSensor
+from crowd_sim.envs.utils.rectangles import (
+    NormZoneRectangle,
+    Rectangle,
+    VelocityRectangle,
+)
 from crowd_sim.envs.utils.robot import Robot
 from crowd_sim.envs.utils.state import *
 
@@ -226,6 +228,8 @@ class CrowdSim(gym.Env):
         self.world_box = Rectangle(world_size, world_size)
         t = world_size / 2
         self.wall_pts = [(-t, -t), (t, -t), (t, t), (-t, t)]
+        # print(f"{list(self.world_box._rect.exterior.coords)=}")
+        # print(f"{self.wall_pts=}")
         if self.config.lidar.enable:
             self.lidar = LidarSensor(config.lidar.cfg)
         else:
@@ -294,8 +298,8 @@ class CrowdSim(gym.Env):
         return human
 
     def create_agent_attributes(self, scenario, agent):
-        """ BASED ON SCENARIO generate agent's spawn and goal positions,
-        heading, and v_pref values """
+        """BASED ON SCENARIO generate agent's spawn and goal positions,
+        heading, and v_pref values"""
 
         v_pref = 1.0 if agent.v_pref == 0 else agent.v_pref
         # add some noise to simulate all the possible cases robot could meet with human
@@ -913,15 +917,12 @@ class CrowdSim(gym.Env):
         step_info = dict()
         self.robot_VR = VelocityRectangle(self.robot)
 
-
         self.social_NZ = set()
         if self.config.reward.norm_zones:
             social_norm = self.config.reward.norm_zone_side
             # NOTE: for SA-CADRL norm zones, centered at robots
             left_NZ = NormZoneRectangle(self.robot, side="left", norm=social_norm)
-            right_NZ = NormZoneRectangle(
-                self.robot, side="right", norm=social_norm
-            )
+            right_NZ = NormZoneRectangle(self.robot, side="right", norm=social_norm)
             self.social_NZ.add(left_NZ)
             self.social_NZ.add(right_NZ)
 
@@ -1274,10 +1275,9 @@ class CrowdSim(gym.Env):
         #     ax.add_artist(polygon)
         #     unordered_artists.add(polygon)
 
-
         if len(self.social_NZ) > 0:
             for norm_zone in self.social_NZ:
-                color = 'r'
+                color = "r"
                 polygon = patches.Polygon(
                     xy=norm_zone._rect.exterior.coords, fill=False, color=color
                 )

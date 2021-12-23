@@ -2,7 +2,7 @@ import numpy as np
 import rvo2
 from crowd_nav.policy.policy import Policy
 from crowd_sim.envs.utils.action import ActionXY
-from crowd_sim.envs.utils.helper import Rectangle
+from crowd_sim.envs.utils.rectangles import Rectangle
 
 
 class ORCA(Policy):
@@ -133,6 +133,7 @@ class ORCA(Policy):
                     self.max_speed,
                     human_state.velocity
                 )
+            self.process_obstacles()
         else:
             self.sim.setAgentPosition(0, self_state.position)
             self.sim.setAgentVelocity(0, self_state.velocity)
