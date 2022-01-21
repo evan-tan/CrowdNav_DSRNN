@@ -473,7 +473,7 @@ class CrowdSim(gym.Env):
         for human in self.humans:
             if not human.isObstacle:
                 new_policy = random.choice(["orca", "social_force"])
-                new_policy = policy_factory[new_policy]()
+                new_policy = policy_factory[new_policy](self.config)
                 human.set_policy(new_policy)
 
     # Generates group of circum_num humans in a circle formation at a random viable location

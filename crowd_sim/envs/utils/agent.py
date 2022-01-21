@@ -206,6 +206,7 @@ class Agent(object):
         if self.kinematics == "holonomic":
             self.vx = action.vx
             self.vy = action.vy
+            # theta not updated?
         else:
             self.theta = (self.theta + action.r) % (2 * np.pi)
             self.vx = action.v * np.cos(self.theta)

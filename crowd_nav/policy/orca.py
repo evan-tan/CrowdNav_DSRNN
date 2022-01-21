@@ -63,6 +63,7 @@ class ORCA(Policy):
         self.obstacle_points = None
 
         # this is generated at runtime in train.py / test.py
+        # TODO: change attr from obstacle, instead parse obstacle points directly
         if config.obstacle.static.enable:
             self.obstacle_points = config.obstacle.static.points
 

@@ -15,8 +15,8 @@ class Config(object):
     obstacle.walls = BaseConfig()  # this will be dependent on sim.square_width
     obstacle.static = BaseConfig()
 
-    obstacle.walls.enable = True
-    obstacle.static.enable = True
+    obstacle.walls.enable = False
+    obstacle.static.enable = False
     obstacle.static.num = 5
     obstacle.static.size_range = (0.5, 0.5)
     # NOTE: load obstacles during runtime in train.py or test.py!

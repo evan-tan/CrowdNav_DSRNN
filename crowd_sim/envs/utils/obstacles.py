@@ -1,7 +1,13 @@
+# %%
 import random
 
 import numpy as np
-from crowd_sim.envs.utils.helper import ang_diff, vec_norm
+from crowd_sim.envs.utils.helper import (
+    ang_diff,
+    make_shapely_ellipse,
+    rand_world_pt,
+    vec_norm,
+)
 from shapely.geometry import Point, Polygon
 
 
@@ -19,7 +25,6 @@ def generate_offset(proposed_pos, size):
     if proposed_pos[0] < 0:
         x_offset = size
     else:
-
         x_offset = -size
     # generate y offset
     if proposed_pos[1] < 0:
@@ -30,152 +35,79 @@ def generate_offset(proposed_pos, size):
     return x_offset, y_offset
 
 
-# NOTE: square_width is essentially the radius of the world environment (square)
-# determine if we want points to wrap around
-def generate_polygon(
-    polygon_shape: str, polygon_scale: float, square_width: float, wrap: bool = False
-):
+# check if a particular "test" geometry is inside "container"'s geometry
+# True, if inside, False otherwise
+def inside(test, container):
+    if type(container) is list:
+        # convert list of points into a polygon
+        container = Polygon(container)
 
-    polygon_vertices = []
-
-    if "square" in polygon_shape.lower():
-        val = polygon_scale * square_width
-        # clockwise direction
-        # [-val, -val], [-val, val], [val, val], [val, -val]
-        # counter clockwise direction
-        polygon_vertices = [[-val, -val], [val, -val], [val, val], [-val, val]]
+    if type(container) is Polygon:
+        if type(test) is Point:
+            return test.within(container)
+        elif type(test) is Polygon:
+            return container.contains(test)
     else:
-        pass
-
-    if wrap:
-        if polygon_vertices[-1] != polygon_vertices[0]:
-            polygon_vertices.append(polygon_vertices[0])
-        # polygon_vertices = np.array(polygon_vertices)
-    else:
-        pass
-
-    return polygon_vertices
-
-
-# generate ORCA boundary obstacles
-def generate_boundary(polygon_vertices, thickness):
-    # wrap points around
-    if polygon_vertices[-1] != polygon_vertices[0]:
-        polygon_vertices.append(polygon_vertices[0])
-
-    for i in range(len(polygon_vertices) - 1):
-        ptA = polygon_vertices[i]
-        ptB = polygon_vertices[i + 1]
-
-        length = vec_norm(ptA, ptB)
-        angle = ang_diff(ptA, ptB)
-
-
-# check if a particular point is inside polygon
-# True, if inside polygon, False otherwise
-def inside_polygon(polygon_vertices, point):
-    # don't wrap values around list
-    if polygon_vertices[-1] == polygon_vertices[0]:
-        polygon_vertices = polygon_vertices[:-1]
-
-    # create shapely objects
-    polygon_shape = Polygon(polygon_vertices)
-    point_shape = Point(point)
-
-    return point_shape.within(polygon_shape)
+        raise NotImplementedError
 
 
 # generate obstacles in config.py
-def generate_obstacle_points(config):
-    all_obstacles = []
-    radii = []
-    centers = []
-    boundary_vertices = []
-    num_obstacles_left = config.sim.obstacle_num
+def generate_indoor_obstacles(config, wall_pts):
 
-    if config.sim.confined_space:
-        boundary_vertices = generate_polygon(
-            config.sim.polygon_shape, config.sim.polygon_scale, config.sim.square_width
-        )
+    obstacles = {}
+    num_obstacles_left = config.obstacle.static.num
 
     # attempt to generate obstacles
     while num_obstacles_left > 0:
+        # describes current obstacle
+        descriptor = {"pts": None}
+
         radius = np.random.uniform(
-            min(config.sim.obstacle_size_range),
-            max(config.sim.obstacle_size_range),
+            min(config.obstacle.static.size_range),
+            max(config.obstacle.static.size_range),
         )
+        # proposed position
+        pt = Point(rand_world_pt(config), rand_world_pt(config))
+        curr_obstacle = make_shapely_ellipse(radius, [pt.x, pt.y])
 
-        chosen_shape = random.choice(config.sim.obstacle_shape)
-        curr_obstacle = generate_polygon(chosen_shape, 0.5, radius)
-        collision = False
-
-        # place obstacle at random point
-        x = (np.random.random() - 0.5) * 2
-        y = (np.random.random() - 0.5) * 2
-        if config.sim.confined_space:
-            x *= config.sim.polygon_scale * config.sim.square_width
-            y *= config.sim.polygon_scale * config.sim.square_width
-        else:
-            x *= config.sim.square_width
-            y *= config.sim.square_width
-
-        x_offset, y_offset = generate_offset([x, y], radius)
         # add offsets to ensure obstacle within simulation world
-        x += x_offset
-        y += y_offset
+        x_offset, y_offset = generate_offset([pt.x, pt.y], radius)
+        pt.x += x_offset
+        pt.y += y_offset
 
+        collision = False
         # check if point is outside confined space
-        if config.sim.confined_space and not inside_polygon(boundary_vertices, [x, y]):
+        if config.walls.enable and not inside(pt, wall_pts):
             # technically not a collision but just a check fail
             collision = True
             continue
 
-        if len(centers) and len(radii) == 0:
+        descriptor["points"] = list(curr_obstacle.exterior.coords)
+        descriptor["center"] = tuple(pt.x, pt.y)
+        descriptor["radius"] = radius
+        if len(obstacles) == 0:
             # add first obstacle
             if not collision:
-                # offset obstacle to correct position
-                for pt in curr_obstacle:
-                    pt[0] += x
-                    pt[1] += y
-                all_obstacles.append(curr_obstacle)
-                radii.append(radius)
-                centers.append([x, y])
+                # 0 indexed
+                id_ = config.obstacle.static.num - num_obstacles_left
                 num_obstacles_left -= 1
-
+                obstacles[id_] = descriptor
         else:
             # check proposed position for collision with any existing obstacles
-            for i in range(len(radii)):
-                centroid_dist = vec_norm([x, y], centers[i])
-                if "square" in chosen_shape:
-                    # maximum distance between 2 squares
-                    min_dist = np.sqrt(2) * (radii[i] + radius)
-                else:
-                    # for circlular obstacles
-                    min_dist = radii[i] + radius
+            for obs_id, obs_desc in obstacles.items():
+                centroid_dist = vec_norm([pt.x, pt.y], obstacles)
+                # for circlular obstacles
+                min_dist = radius + obs_desc["radius"]
 
                 # collision occurred between proposed x,y and already existing obstacles
                 # OR obstacle separation is too small for largest pedestrian
                 if centroid_dist < min_dist:
                     collision = True
                     break
-            # centroid_dist < max(config.humans.radii_range)
 
             if not collision:
-                # offset obstacle to correct position
-                for pt in curr_obstacle:
-                    pt[0] += x
-                    pt[1] += y
-                all_obstacles.append(curr_obstacle)
-                radii.append(radius)
-                centers.append([x, y])
+                id_ = config.obstacle.static.num - num_obstacles_left
                 num_obstacles_left -= 1
+                obstacles[id_] = descriptor
 
-    return all_obstacles
-
-
-def generate_static_obstacles():
-    pass
-
-
-if __name__ == "__main__":
-    print(generate_polygon("square", 0.5, 20, False))
+    return obstacles

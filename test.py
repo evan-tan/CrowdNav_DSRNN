@@ -14,7 +14,6 @@ import torch
 import torch.nn as nn
 
 from crowd_sim import *
-from crowd_sim.envs.utils.helper import generate_static_obstacles
 from pytorchBaselines.a2c_ppo_acktr.envs import make_vec_envs
 from pytorchBaselines.a2c_ppo_acktr.model import Policy
 from pytorchBaselines.evaluation import evaluate
@@ -96,7 +95,6 @@ def main():
         from crowd_nav.configs.config import Config
 
     config = Config()
-    config.obstacle.static.points = generate_static_obstacles()
 
     # configure logging and device
     # print test result in log file
