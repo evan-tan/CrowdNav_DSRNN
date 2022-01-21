@@ -23,6 +23,7 @@ from crowd_sim.envs.utils.helper import (
 from crowd_sim.envs.utils.human import Human
 from crowd_sim.envs.utils.info import Collision, Danger, Nothing, ReachGoal, Timeout
 from crowd_sim.envs.utils.lidarv2 import LidarSensor
+from crowd_sim.envs.utils.obstacles import generate_indoor_obstacles
 from crowd_sim.envs.utils.rectangles import (
     NormZoneRectangle,
     Rectangle,
@@ -169,7 +170,7 @@ class CrowdSim(gym.Env):
         self.dummy_robot.set(7, 7, 7, 7, 0, 0, 0)
         self.dummy_robot.time_step = config.env.time_step
         self.dummy_robot.kinematics = "holonomic"
-        self.dummy_robot.policy = ORCA(config)
+
 
         # configure noise in state
         self.add_noise = config.noise.add_noise
@@ -228,6 +229,11 @@ class CrowdSim(gym.Env):
         self.world_box = Rectangle(world_size, world_size)
         t = world_size / 2
         self.wall_pts = [(-t, -t), (t, -t), (t, t), (-t, t)]
+        self.indoor_obstacles = generate_indoor_obstacles(self.config, self.wall_pts)
+        # TODO: parse obstacle points
+        # TODO: parse wall_pts
+        self.dummy_robot.policy = ORCA(config, None)
+
         # print(f"{list(self.world_box._rect.exterior.coords)=}")
         # print(f"{self.wall_pts=}")
         if self.config.lidar.enable:

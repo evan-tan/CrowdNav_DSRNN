@@ -6,7 +6,7 @@ from crowd_sim.envs.utils.rectangles import Rectangle
 
 
 class ORCA(Policy):
-    def __init__(self, config):
+    def __init__(self, config, indoor_obstacle_pts=None):
         """
         timeStep        The time step of the simulation.
                         Must be positive.
