@@ -229,10 +229,13 @@ class CrowdSim(gym.Env):
         self.world_box = Rectangle(world_size, world_size)
         t = world_size / 2
         self.wall_pts = [(-t, -t), (t, -t), (t, t), (-t, t)]
-        self.indoor_obstacles = generate_indoor_obstacles(self.config, self.wall_pts)
+        if self.config.obstacle.static.enable:
+            self.indoor_obstacles = generate_indoor_obstacles(self.config, self.wall_pts)
+        else:
+            self.indoor_obstacles = None
         # TODO: parse obstacle points
         # TODO: parse wall_pts
-        self.dummy_robot.policy = ORCA(config, None)
+        self.dummy_robot.policy = ORCA(config, self.indoor_obstacles)
 
         # print(f"{list(self.world_box._rect.exterior.coords)=}")
         # print(f"{self.wall_pts=}")

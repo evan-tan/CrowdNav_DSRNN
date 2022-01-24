@@ -1,5 +1,5 @@
-# %%
 import random
+from typing import Dict
 
 import numpy as np
 from crowd_sim.envs.utils.helper import (
@@ -66,14 +66,14 @@ def inside(test, container):
 
 
 # generate obstacles in config.py
-def generate_indoor_obstacles(config, wall_pts):
+def generate_indoor_obstacles(config, wall_pts) -> Dict:
 
     obstacles = {}
     num_obstacles_left = config.obstacle.static.num
 
     while num_obstacles_left > 0:
         # describes current obstacle
-        descriptor = {"pts": None}
+        descriptor = {}
 
         radius = np.random.uniform(
             min(config.obstacle.static.size_range),
@@ -81,7 +81,9 @@ def generate_indoor_obstacles(config, wall_pts):
         )
         # proposed position
         pt = PointXY(rand_world_pt(config), rand_world_pt(config))
-        curr_obstacle = make_shapely_ellipse(radius, [pt.x, pt.y])
+        # for example, using a radius of 1.0
+        # downsampling reduces from 66 points -> 9 points
+        curr_obstacle = make_shapely_ellipse(radius, [pt.x, pt.y], downsample=True)
 
         # add offsets to ensure obstacle within simulation world
         x_offset, y_offset = generate_offset([pt.x, pt.y], radius)
@@ -95,7 +97,8 @@ def generate_indoor_obstacles(config, wall_pts):
             collision = True
             continue
 
-        descriptor["points"] = list(curr_obstacle.exterior.coords)
+        # when parsing into ORCA, obstacle vertices should be counter-clockwise
+        descriptor["points"] = list(curr_obstacle.exterior.coords)[::-1]
         descriptor["center"] = tuple([pt.x, pt.y])
         descriptor["radius"] = radius
 
@@ -109,7 +112,7 @@ def generate_indoor_obstacles(config, wall_pts):
             # OR obstacle separation is too small for largest pedestrian
             if centroid_dist < min_dist:
                 collision = True
-                print(f"{pt.x=},{pt.y=} collided with Obstacle{obs_id}!")
+                print(f"obstacles: {pt.x=}, {pt.y=} collided with Obstacle{obs_id}!")
                 break
 
         if not collision:

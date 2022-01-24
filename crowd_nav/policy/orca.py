@@ -6,7 +6,7 @@ from crowd_sim.envs.utils.rectangles import Rectangle
 
 
 class ORCA(Policy):
-    def __init__(self, config, indoor_obstacle_pts=None):
+    def __init__(self, config, obstacles_dict: dict = None):
         """
         timeStep        The time step of the simulation.
                         Must be positive.
@@ -60,13 +60,9 @@ class ORCA(Policy):
         # the ego agent assumes that all other agents have this max speed
         self.max_speed = config.humans.v_pref
         self.sim = None
-        self.obstacle_points = None
+        self.obstacles = obstacles_dict if obstacles_dict else None
 
-        # this is generated at runtime in train.py / test.py
-        # TODO: change attr from obstacle, instead parse obstacle points directly
-        if config.obstacle.static.enable:
-            self.obstacle_points = config.obstacle.static.points
-
+        # TODO: fix wall boundaries
         if config.obstacle.walls.enable:
             world_size = config.sim.square_width
             # misleading because it's not a rectangle
@@ -74,19 +70,20 @@ class ORCA(Policy):
                 Rectangle(world_size, world_size)._rect.exterior.coords
             )
 
-    # add obstacles into simulation
-    def process_obstacles(self):
-        if self.config.obstacle.static.enable:
-            num_obstacles = self.config.obstacle.static.num
-            if num_obstacles >= 1:
-                for i in range(num_obstacles):
-                    obstacle = self.obstacle_points[i]
+    def _parse_obstacles(self):
+        """Parse indoor obstacles into RVO2 simulator"""
+        if self.obstacles:
+            num_obstacles = len(self.obstacles)
+            if num_obstacles > 0:
+                # loop through obstacle descriptors, see obstacles.py for NESTED DICT keys
+                for _, obst_desc in self.obstacles:
+                    assert type(obst_desc) is dict
                     # method requires obstacle vertices in counter-clockwise
-                    self.simulator.addObstacle(obstacle)
+                    self.simulator.addObstacle(obst_desc.get("points"))
+                # must be called
+                self.simulator.processObstacles()
             else:
-                self.simulator.addObstacle(self.simulator.obstacle_points)
-            # must be called
-            self.simulator.processObstacles()
+                print("ORCA: Obstacles dictionary empty!")
 
     def predict(self, state):
         """
@@ -134,7 +131,7 @@ class ORCA(Policy):
                     self.max_speed,
                     human_state.velocity
                 )
-            self.process_obstacles()
+            self._parse_obstacles()
         else:
             self.sim.setAgentPosition(0, self_state.position)
             self.sim.setAgentVelocity(0, self_state.velocity)
