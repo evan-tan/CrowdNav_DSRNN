@@ -7,6 +7,7 @@ from numpy.linalg import norm
 from crowd_sim.envs import CrowdSim
 from crowd_sim.envs.utils.action import ActionRot
 from crowd_sim.envs.utils.helper import unsqueeze
+from crowd_sim.envs.utils.obstacles import generate_indoor_obstacles
 
 
 class CrowdSimDict(CrowdSim):
@@ -95,7 +96,10 @@ class CrowdSimDict(CrowdSim):
                 ob["spatial_edges"][i] = relative_pos
         elif self.config.robot.policy == "convgru":
             # TODO: fix robot's state input??
-            robot_state = np.array(self.robot.get_full_state_list_noV()) / self.config.lidar.cfg['max_range']
+            robot_state = (
+                np.array(self.robot.get_full_state_list_noV())
+                / self.config.lidar.cfg["max_range"]
+            )
             robot_state = np.clip(robot_state, 0, 1)
             ob = np.append(robot_state, self.lidar_rel_dist)
             ob = unsqueeze(ob, dim=0)
@@ -150,6 +154,8 @@ class CrowdSimDict(CrowdSim):
             "test": self.case_capacity["val"],
         }
 
+        # NOTE: generate indoor obstacles BEFORE generating robot/humans
+        self.indoor_obstacles = generate_indoor_obstacles(self.config, self.wall_pts)
         # here we use a counter to calculate seed. The seed=counter_offset + case_counter
         np.random.seed(counter_offset[phase] + self.case_counter[phase] + self.thisSeed)
         self.generate_robot_humans(phase)

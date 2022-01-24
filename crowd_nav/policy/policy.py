@@ -3,7 +3,7 @@ import numpy as np
 
 
 class Policy(object):
-    def __init__(self, config):
+    def __init__(self, config, obstacles: dict = None):
         """
         Base class for all policies, has an abstract method predict().
         """

@@ -90,8 +90,9 @@ class CrowdSim(gym.Env):
         self.render_bg = None
 
         self.humans = []
-
         self.potential = None
+
+        self.indoor_obstacles = None
 
     def configure(self, config):
         self.config = config
@@ -161,16 +162,15 @@ class CrowdSim(gym.Env):
 
         # set dummy human and dummy robot
         # dummy humans, used if any human is not in view of other agents
-        self.dummy_human = Human(self.config, "humans")
+        self.dummy_human = Human(self.config, "humans", self.indoor_obstacles)
         # if a human is not in view, set its state to (px = 100, py = 100, vx = 0, vy = 0, theta = 0, radius = 0)
         self.dummy_human.set(7, 7, 7, 7, 0, 0, 0)  # (7, 7, 7, 7, 0, 0, 0)
         self.dummy_human.time_step = config.env.time_step
 
-        self.dummy_robot = Robot(self.config, "robot")
+        self.dummy_robot = Robot(self.config, "robot", self.indoor_obstacles)
         self.dummy_robot.set(7, 7, 7, 7, 0, 0, 0)
         self.dummy_robot.time_step = config.env.time_step
         self.dummy_robot.kinematics = "holonomic"
-
 
         # configure noise in state
         self.add_noise = config.noise.add_noise
@@ -230,7 +230,9 @@ class CrowdSim(gym.Env):
         t = world_size / 2
         self.wall_pts = [(-t, -t), (t, -t), (t, t), (-t, t)]
         if self.config.obstacle.static.enable:
-            self.indoor_obstacles = generate_indoor_obstacles(self.config, self.wall_pts)
+            self.indoor_obstacles = generate_indoor_obstacles(
+                self.config, self.wall_pts
+            )
         else:
             self.indoor_obstacles = None
         # TODO: parse obstacle points
@@ -275,7 +277,7 @@ class CrowdSim(gym.Env):
     # position: (px, py) for fixed position, or None for random position
     def generate_circle_static_obstacle(self, position=None):
         # generate a human with radius = 0.3, v_pref = 1, visible = True, and policy = orca
-        human = Human(self.config, "humans")
+        human = Human(self.config, "humans", self.indoor_obstacles)
         # For fixed position
         if position:
             px, py = position
@@ -370,7 +372,7 @@ class CrowdSim(gym.Env):
         return px, py, gx, gy, heading, v_pref
 
     def generate_circle_crossing_human(self):
-        human = Human(self.config, "humans")
+        human = Human(self.config, "humans", self.indoor_obstacles)
         if self.randomize_attributes:
             human.sample_random_attributes()
         while True:
@@ -397,6 +399,15 @@ class CrowdSim(gym.Env):
                             human.radius + agent.radius + self.discomfort_dist_back
                         )
                     if vec_norm([px, py], [agent.px, agent.py]) < min_dist:
+                        collide = True
+                        break
+            if self.indoor_obstacles:
+                for _, obst_desc in self.indoor_obstacles.items():
+                    min_dist = obst_desc["radius"] + human.radius
+                    # spawn/goal pos clash
+                    if vec_norm(obst_desc["center"], [px, py]) <= (
+                        min_dist
+                    ) or vec_norm(obst_desc["center"], [gx, gy]) <= (min_dist):
                         collide = True
                         break
             if not collide:
@@ -670,6 +681,19 @@ class CrowdSim(gym.Env):
                         # ensure minimum distance of 6m
                         if np.linalg.norm([px - gx, py - gy]) >= 6:
                             break
+                        if self.indoor_obstacles:
+                            for _, obst_desc in self.indoor_obstacles.items():
+                                min_dist = obst_desc["radius"] + self.robot.radius
+                                # spawn pos clash
+                                if vec_norm(obst_desc["center"], [px, py]) <= (
+                                    min_dist
+                                ):
+                                    break
+                                # goal pos clash
+                                if vec_norm(obst_desc["center"], [gx, gy]) <= (
+                                    min_dist
+                                ):
+                                    break
                     self.robot.set(px, py, gx, gy, 0, 0, np.pi / 2)
 
             # generate humans
@@ -1247,7 +1271,7 @@ class CrowdSim(gym.Env):
         unordered_artists = set()  # use set to speed up animation,
         ordered_artists = list()  # use for drawings that have to be in foreground
 
-        ###### START LIDAR DRAWING #####
+        ###### START DRAWING LIDAR #####
         from crowd_sim.envs.utils.lidarv2 import rotate, unsqueeze
 
         if self.lidar_end_pts is not None and self.config.lidar.viz:
@@ -1265,7 +1289,7 @@ class CrowdSim(gym.Env):
             #     ax.add_artist(lidar_beam)
             #     unordered_artists.add(lidar_beam)
 
-        ##### END LIDAR DRAWING #####
+        ##### END DRAWING LIDAR #####
 
         # DRAW BOX
         walls_coords = self.world_box._rect.exterior.coords
@@ -1273,7 +1297,7 @@ class CrowdSim(gym.Env):
         ax.add_artist(walls)
         unordered_artists.add(walls)
 
-        ###### START ROBOT DRAWING ######
+        ###### START DRAWING ROBOT ######
 
         # NOTE: for plotting velocity rectangles
         # if self.robot_VR is not None:
@@ -1458,6 +1482,14 @@ class CrowdSim(gym.Env):
             unordered_artists.add(human_circle)
 
         ###### END DRAWING HUMANS ######
+        ###### START DRAWING OBSTACLES ######
+        if self.indoor_obstacles:
+            for id_, obst in self.indoor_obstacles.items():
+                obst_poly = patches.Polygon(obst.get("points"), fill=False)
+                ax.add_artist(obst_poly)
+                unordered_artists.add(obst_poly)
+
+        ###### END DRAWING OBSTACLES ######
 
         for art in unordered_artists:
             self.render_axis.draw_artist(art)

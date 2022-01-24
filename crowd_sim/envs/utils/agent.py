@@ -1,14 +1,15 @@
-import numpy as np
-from numpy.linalg import norm
 import abc
 import logging
+
+import numpy as np
 from crowd_nav.policy.policy_factory import policy_factory
-from crowd_sim.envs.utils.action import ActionXY, ActionRot
-from crowd_sim.envs.utils.state import ObservableState, FullState, ObservableState_noV
+from crowd_sim.envs.utils.action import ActionRot, ActionXY
+from crowd_sim.envs.utils.state import FullState, ObservableState, ObservableState_noV
+from numpy.linalg import norm
 
 
 class Agent(object):
-    def __init__(self, config, section):
+    def __init__(self, config, section, obstacles: dict = None):
         """
         Base class for robot and human. Have the physical attributes of an agent.
 
@@ -17,7 +18,10 @@ class Agent(object):
         self.visible = subconfig.visible
         self.v_pref = subconfig.v_pref
         self.radius = subconfig.radius
-        self.policy = policy_factory[subconfig.policy](config)
+        # Policy class constructor can handle None type
+        # print(f"{subconfig=}, {subconfig.policy=}")
+        self.policy = policy_factory[subconfig.policy](config, obstacles)
+
         self.sensor = subconfig.sensor
         self.FOV = np.pi * subconfig.FOV
         # for humans: we only have holonomic kinematics; for robot: depend on config

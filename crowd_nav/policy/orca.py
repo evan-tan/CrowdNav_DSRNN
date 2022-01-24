@@ -76,12 +76,12 @@ class ORCA(Policy):
             num_obstacles = len(self.obstacles)
             if num_obstacles > 0:
                 # loop through obstacle descriptors, see obstacles.py for NESTED DICT keys
-                for _, obst_desc in self.obstacles:
+                for _, obst_desc in self.obstacles.items():
                     assert type(obst_desc) is dict
                     # method requires obstacle vertices in counter-clockwise
-                    self.simulator.addObstacle(obst_desc.get("points"))
+                    self.sim.addObstacle(obst_desc.get("points"))
                 # must be called
-                self.simulator.processObstacles()
+                self.sim.processObstacles()
             else:
                 print("ORCA: Obstacles dictionary empty!")
 

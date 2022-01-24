@@ -3,8 +3,8 @@ from crowd_sim.envs.utils.state import JointState, JointState_noV
 
 
 class Robot(Agent):
-    def __init__(self, config, section):
-        super().__init__(config, section)
+    def __init__(self, config, section, obstacles: dict = None):
+        super().__init__(config, section, obstacles)
 
     def act(self, ob):
         if self.policy is None:

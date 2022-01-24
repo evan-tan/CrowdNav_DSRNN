@@ -4,8 +4,8 @@ from crowd_sim.envs.utils.state import JointState
 
 class Human(Agent):
     # see Agent class in agent.py for details!!!
-    def __init__(self, config, section):
-        super().__init__(config, section)
+    def __init__(self, config, section, obstacles):
+        super().__init__(config, section, obstacles)
         self.isObstacle = False  # whether the human is a static obstacle (part of wall) or a moving agent
 
     def act(self, ob):
