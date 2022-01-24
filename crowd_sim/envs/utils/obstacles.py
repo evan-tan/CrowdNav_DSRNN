@@ -3,6 +3,7 @@ import random
 
 import numpy as np
 from crowd_sim.envs.utils.helper import (
+    PointXY,
     ang_diff,
     make_shapely_ellipse,
     rand_world_pt,
@@ -36,12 +37,25 @@ def generate_offset(proposed_pos, size):
 
 
 # check if a particular "test" geometry is inside "container"'s geometry
-# True, if inside, False otherwise
 def inside(test, container):
+    """
+    Test whether an object is inside another currently supports:
+    Point in Polygon test
+    Polygon in Polygon test
+
+    returns True, if inside, False otherwise
+    """
+    # jank type conversions
     if type(container) is list:
         # convert list of points into a polygon
         container = Polygon(container)
+    if type(test) != Point:
+        if type(test) is PointXY:
+            test = Point(PointXY.x, PointXY.y)
+        elif type(test) is list:
+            test = Point(test)
 
+    # logic
     if type(container) is Polygon:
         if type(test) is Point:
             return test.within(container)
@@ -57,7 +71,6 @@ def generate_indoor_obstacles(config, wall_pts):
     obstacles = {}
     num_obstacles_left = config.obstacle.static.num
 
-    # attempt to generate obstacles
     while num_obstacles_left > 0:
         # describes current obstacle
         descriptor = {"pts": None}
@@ -67,7 +80,7 @@ def generate_indoor_obstacles(config, wall_pts):
             max(config.obstacle.static.size_range),
         )
         # proposed position
-        pt = Point(rand_world_pt(config), rand_world_pt(config))
+        pt = PointXY(rand_world_pt(config), rand_world_pt(config))
         curr_obstacle = make_shapely_ellipse(radius, [pt.x, pt.y])
 
         # add offsets to ensure obstacle within simulation world
@@ -77,37 +90,31 @@ def generate_indoor_obstacles(config, wall_pts):
 
         collision = False
         # check if point is outside confined space
-        if config.walls.enable and not inside(pt, wall_pts):
+        if config.obstacle.walls.enable and not inside(pt, wall_pts):
             # technically not a collision but just a check fail
             collision = True
             continue
 
         descriptor["points"] = list(curr_obstacle.exterior.coords)
-        descriptor["center"] = tuple(pt.x, pt.y)
+        descriptor["center"] = tuple([pt.x, pt.y])
         descriptor["radius"] = radius
-        if len(obstacles) == 0:
-            # add first obstacle
-            if not collision:
-                # 0 indexed
-                id_ = config.obstacle.static.num - num_obstacles_left
-                num_obstacles_left -= 1
-                obstacles[id_] = descriptor
-        else:
-            # check proposed position for collision with any existing obstacles
-            for obs_id, obs_desc in obstacles.items():
-                centroid_dist = vec_norm([pt.x, pt.y], obstacles)
-                # for circlular obstacles
-                min_dist = radius + obs_desc["radius"]
 
-                # collision occurred between proposed x,y and already existing obstacles
-                # OR obstacle separation is too small for largest pedestrian
-                if centroid_dist < min_dist:
-                    collision = True
-                    break
+        # check proposed position for collision with any EXISTING obstacles
+        for obs_id, obs_desc in obstacles.items():
+            centroid_dist = vec_norm([pt.x, pt.y], obs_desc["center"])
+            # assume circlular obstacles
+            min_dist = radius + obs_desc["radius"]
 
-            if not collision:
-                id_ = config.obstacle.static.num - num_obstacles_left
-                num_obstacles_left -= 1
-                obstacles[id_] = descriptor
+            # collision occurred between proposed x,y and already existing obstacles
+            # OR obstacle separation is too small for largest pedestrian
+            if centroid_dist < min_dist:
+                collision = True
+                print(f"{pt.x=},{pt.y=} collided with Obstacle{obs_id}!")
+                break
+
+        if not collision:
+            id_ = config.obstacle.static.num - num_obstacles_left
+            num_obstacles_left -= 1
+            obstacles[id_] = descriptor
 
     return obstacles
