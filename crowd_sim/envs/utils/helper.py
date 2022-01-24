@@ -8,6 +8,14 @@ import shapely.geometry
 from shapely.geometry import LineString
 
 
+class PointXY:
+    """Simple mutable class since Shapely Point class is immutable"""
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+
 def unsqueeze(arr: np.ndarray, dim: int) -> np.ndarray:
     """Wrapper function for torch.unsqueeze() functionality in NumPy"""
     return np.expand_dims(arr, axis=dim)
